@@ -1,7 +1,7 @@
 # Install PC Remote Server Autostart in Task Scheduler and Startup
 $pythonw = "C:\Users\chyad\AppData\Local\Programs\Python\Python314\pythonw.exe"
-$scriptPath = "C:\Users\chyad\.gemini\antigravity\scratch\pc-remote\server\server.py"
-$workDir = "C:\Users\chyad\.gemini\antigravity\scratch\pc-remote\server"
+$scriptPath = "C:\Users\chyad\.gemini\antigravity\scratch\pc-controller\server\server.py"
+$workDir = "C:\Users\chyad\.gemini\antigravity\scratch\pc-controller\server"
 
 Write-Host "Creating Scheduled Task for PC Remote..." -ForegroundColor Cyan
 

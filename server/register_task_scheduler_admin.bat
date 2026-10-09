@@ -11,7 +11,7 @@ echo ========================================================
 echo Registering PC Remote Server in Task Scheduler...
 echo ========================================================
 
-schtasks /create /tn "PCRemoteServer" /tr "\"C:\Users\chyad\AppData\Local\Programs\Python\Python314\pythonw.exe\" \"C:\Users\chyad\.gemini\antigravity\scratch\pc-remote\server\server.py\"" /sc onlogon /rl highest /f
+schtasks /create /tn "PCRemoteServer" /tr "\"C:\Users\chyad\AppData\Local\Programs\Python\Python314\pythonw.exe\" \"C:\Users\chyad\.gemini\antigravity\scratch\pc-controller\server\server.py\"" /sc onlogon /rl highest /f
 
 if %errorlevel% equ 0 (
     echo.
