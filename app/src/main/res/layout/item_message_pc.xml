@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="start"
+    android:orientation="vertical"
+    android:paddingStart="12dp"
+    android:paddingEnd="48dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_bubble_pc"
+        android:orientation="vertical"
+        android:paddingStart="14dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="10dp">
+
+        <TextView
+            android:id="@+id/tvSender"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="💻 PC"
+            android:textColor="@color/accent"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvMessage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp"
+            android:lineSpacingExtra="3dp"
+            android:textIsSelectable="true" />
+
+        <!-- Screenshot Image Container -->
+        <FrameLayout
+            android:id="@+id/layoutImageContainer"
+            android:layout_width="260dp"
+            android:layout_height="170dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="4dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/ivScreenshot"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:adjustViewBounds="true"
+                android:background="#1A1D27"
+                android:clickable="true"
+                android:contentDescription="Screenshot"
+                android:focusable="true"
+                android:scaleType="centerCrop" />
+
+            <ProgressBar
+                android:id="@+id/pbImageLoading"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_gravity="center"
+                android:indeterminateTint="@color/accent" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/tvTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="start"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/text_muted"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+</LinearLayout>
