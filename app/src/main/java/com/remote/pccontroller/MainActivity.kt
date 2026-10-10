@@ -17,13 +17,17 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.Window
 import android.view.inputmethod.EditorInfo
+import android.os.Handler
+import android.os.Looper
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -88,9 +92,13 @@ class MainActivity : AppCompatActivity() {
         tvConnectionStatus = findViewById(R.id.tvConnectionStatus)
 
         // Setup RecyclerView
-        adapter = ChatAdapter(messages, client) { imageUrl ->
-            showFullscreenImage(imageUrl)
-        }
+        adapter = ChatAdapter(
+            messages = messages,
+            client = client,
+            onImageClick = { imageUrl -> showFullscreenImage(imageUrl) },
+            onVolumeChanged = { newVolume -> sendVolumeUpdate(newVolume) },
+            onMuteClick = { sendCommand("mute") }
+        )
         val layoutManager = LinearLayoutManager(this)
         layoutManager.stackFromEnd = true
         rvMessages.layoutManager = layoutManager
@@ -201,6 +209,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.chipMessi)?.setOnClickListener { sendCommand("messi") }
         findViewById<TextView>(R.id.chipRain)?.setOnClickListener { sendCommand("sleep rain 15min") }
         findViewById<TextView>(R.id.chipRainMin)?.setOnClickListener { sendCommand("sleep rain 15m min") }
+        findViewById<TextView>(R.id.chipSoundSlider)?.setOnClickListener { sendCommand("sound") }
         findViewById<TextView>(R.id.chipVol15)?.setOnClickListener { sendCommand("s 15") }
         findViewById<TextView>(R.id.chipVol25)?.setOnClickListener { sendCommand("s 25") }
         findViewById<TextView>(R.id.chipVol40)?.setOnClickListener { sendCommand("s 40") }
@@ -296,8 +305,8 @@ class MainActivity : AppCompatActivity() {
 
             override fun onResponse(call: Call, response: Response) {
                 val body = response.body?.string() ?: ""
-                var reply = body
-                var imageUrl: String? = null
+                var isVolumeControl = false
+                var volumeLevel = 50
                 try {
                     val json = JSONObject(body)
                     if (json.has("message")) {
@@ -307,6 +316,10 @@ class MainActivity : AppCompatActivity() {
                         val path = json.getString("image_url")
                         imageUrl = if (path.startsWith("http")) path else "$baseUrl$path"
                     }
+                    if (json.optString("type") == "volume" || json.has("volume")) {
+                        isVolumeControl = true
+                        volumeLevel = json.optInt("volume", 50)
+                    }
                 } catch (ignored: Exception) {
                 }
 
@@ -315,8 +328,14 @@ class MainActivity : AppCompatActivity() {
                     tvConnectionStatus.setTextColor(Color.parseColor("#10B981"))
                     addPcMessage(
                         if (reply.isNotEmpty()) reply else "✅ تم استلام الأمر بنجاح.",
-                        imageUrl = imageUrl
+                        imageUrl = imageUrl,
+                        isVolumeControl = isVolumeControl,
+                        volumeLevel = volumeLevel
                     )
+
+                    if (isVolumeControl) {
+                        showVolumeBottomSheet(volumeLevel)
+                    }
                 }
             }
         })
@@ -678,11 +697,136 @@ class MainActivity : AppCompatActivity() {
         rvMessages.smoothScrollToPosition(messages.size - 1)
     }
 
-    private fun addPcMessage(text: String, imageUrl: String? = null) {
+    private fun addPcMessage(
+        text: String,
+        imageUrl: String? = null,
+        isVolumeControl: Boolean = false,
+        volumeLevel: Int = 50
+    ) {
         val time = timeFormat.format(Date())
-        messages.add(ChatMessage(text, isUser = false, time = time, imageUrl = imageUrl))
+        messages.add(
+            ChatMessage(
+                message = text,
+                isUser = false,
+                time = time,
+                imageUrl = imageUrl,
+                isVolumeControl = isVolumeControl,
+                volumeLevel = volumeLevel
+            )
+        )
         adapter.notifyItemInserted(messages.size - 1)
         rvMessages.smoothScrollToPosition(messages.size - 1)
+    }
+
+    private var lastVolumeSendTime = 0L
+    private var pendingVolumeRunnable: Runnable? = null
+    private val volumeHandler = Handler(Looper.getMainLooper())
+
+    private fun sendVolumeUpdate(volume: Int) {
+        pendingVolumeRunnable?.let { volumeHandler.removeCallbacks(it) }
+
+        val now = System.currentTimeMillis()
+        if (now - lastVolumeSendTime > 120) {
+            lastVolumeSendTime = now
+            executeVolumeRequest(volume)
+        } else {
+            pendingVolumeRunnable = Runnable {
+                lastVolumeSendTime = System.currentTimeMillis()
+                executeVolumeRequest(volume)
+            }
+            volumeHandler.postDelayed(pendingVolumeRunnable!!, 120)
+        }
+    }
+
+    private fun executeVolumeRequest(volume: Int) {
+        val baseUrl = getBaseUrl()
+        val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+        val jsonPayload = JSONObject().apply {
+            put("volume", volume)
+        }.toString()
+
+        val request = Request.Builder()
+            .url("$baseUrl/api/volume")
+            .post(jsonPayload.toRequestBody(jsonMediaType))
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {}
+            override fun onResponse(call: Call, response: Response) {
+                response.close()
+            }
+        })
+    }
+
+    private var activeVolumeBottomSheet: BottomSheetDialog? = null
+
+    private fun showVolumeBottomSheet(initialVolume: Int) {
+        if (isFinishing || isDestroyed) return
+
+        activeVolumeBottomSheet?.let { dialog ->
+            if (dialog.isShowing) {
+                val sb = dialog.findViewById<SeekBar>(R.id.sbBsVolume)
+                val tv = dialog.findViewById<TextView>(R.id.tvBsVolumePercent)
+                sb?.progress = initialVolume
+                tv?.text = "$initialVolume%"
+                return
+            }
+        }
+
+        val dialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.dialog_volume_slider, null)
+        dialog.setContentView(view)
+
+        val tvPercent = view.findViewById<TextView>(R.id.tvBsVolumePercent)
+        val sbVolume = view.findViewById<SeekBar>(R.id.sbBsVolume)
+        val btnClose = view.findViewById<TextView>(R.id.btnBsClose)
+
+        val btnMute = view.findViewById<TextView>(R.id.btnBsMute)
+        val btnVol15 = view.findViewById<TextView>(R.id.btnBsVol15)
+        val btnVol30 = view.findViewById<TextView>(R.id.btnBsVol30)
+        val btnVol50 = view.findViewById<TextView>(R.id.btnBsVol50)
+        val btnVol75 = view.findViewById<TextView>(R.id.btnBsVol75)
+        val btnVol100 = view.findViewById<TextView>(R.id.btnBsVol100)
+
+        tvPercent.text = "$initialVolume%"
+        sbVolume.progress = initialVolume
+
+        val updateDialogVol = { vol: Int ->
+            tvPercent.text = "$vol%"
+            sbVolume.progress = vol
+            sendVolumeUpdate(vol)
+        }
+
+        sbVolume.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    tvPercent.text = "$progress%"
+                    sendVolumeUpdate(progress)
+                }
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                val progress = seekBar?.progress ?: 50
+                tvPercent.text = "$progress%"
+                sendVolumeUpdate(progress)
+            }
+        })
+
+        btnMute.setOnClickListener {
+            sendCommand("mute")
+        }
+        btnVol15.setOnClickListener { updateDialogVol(15) }
+        btnVol30.setOnClickListener { updateDialogVol(30) }
+        btnVol50.setOnClickListener { updateDialogVol(50) }
+        btnVol75.setOnClickListener { updateDialogVol(75) }
+        btnVol100.setOnClickListener { updateDialogVol(100) }
+
+        btnClose.setOnClickListener { dialog.dismiss() }
+
+        activeVolumeBottomSheet = dialog
+        dialog.show()
     }
 
     private fun showSettingsDialog() {

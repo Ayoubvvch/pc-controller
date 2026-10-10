@@ -740,14 +740,25 @@ def execute_action(action_type, param=None):
 
     elif cmd in ["mute", "صامت", "كتم"]:
         is_muted = toggle_system_mute()
+        cur = get_system_volume()
+        try:
+            cur_int = int(cur) if cur is not None else 50
+        except Exception:
+            cur_int = 50
         if is_muted is True:
             return {
                 "status": "success",
+                "type": "volume",
+                "volume": cur_int,
+                "muted": True,
                 "message": "🔇 تم كتم صوت الحاسوب (Muted)."
             }
         else:
             return {
                 "status": "success",
+                "type": "volume",
+                "volume": cur_int,
+                "muted": False,
                 "message": "🔊 تم إلغاء كتم صوت الحاسوب (Unmuted)."
             }
 
@@ -761,14 +772,22 @@ def execute_action(action_type, param=None):
             set_system_volume(val)
             return {
                 "status": "success",
+                "type": "volume",
+                "volume": val,
                 "message": f"🔊 تم ضبط مستوى صوت الحاسوب على {val}%."
             }
         else:
             cur = get_system_volume()
-            cur_str = f"{cur}%" if cur is not None else "غير معروف"
+            try:
+                cur_int = int(cur) if cur is not None else 50
+            except Exception:
+                cur_int = 50
+            cur_str = f"{cur}%" if cur is not None else "50%"
             return {
-                "status": "info",
-                "message": f"🔊 مستوى صوت الحاسوب الحالي: {cur_str}\n💡 لتغيير الصوت أرسل مثلاً: sound 40 أو sound 25"
+                "status": "success",
+                "type": "volume",
+                "volume": cur_int,
+                "message": f"🔊 مستوى صوت الحاسوب: {cur_str}\nيمكنك ضبط الصوت عبر الشريط أدناه:"
             }
 
     elif cmd in ["status", "حالة", "info", "معلومات", "ping", "test"]:
@@ -994,6 +1013,19 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
+        elif parsed.path in ["/api/volume", "/volume"]:
+            cur = get_system_volume()
+            try:
+                cur_int = int(cur) if cur is not None else 50
+            except Exception:
+                cur_int = 50
+            data = {"status": "success", "type": "volume", "volume": cur_int}
+            body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
             self.wfile.write(body)
         else:
             self.send_response(404)
@@ -1149,6 +1181,41 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
             }
             body = json.dumps(resp, ensure_ascii=False).encode("utf-8")
             self.send_response(200 if success else 500)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+        elif parsed.path in ["/api/volume", "/volume"]:
+            content_len = int(self.headers.get("Content-Length", 0))
+            post_body = self.rfile.read(content_len).decode("utf-8").strip()
+            try:
+                payload = json.loads(post_body)
+            except Exception:
+                payload = {}
+
+            if "mute" in payload and payload["mute"] is True:
+                toggle_system_mute()
+            elif "volume" in payload or "val" in payload:
+                new_v = payload.get("volume", payload.get("val", None))
+                if new_v is not None:
+                    try:
+                        v = int(new_v)
+                        set_system_volume(v)
+                    except Exception:
+                        pass
+
+            cur = get_system_volume()
+            try:
+                cur_int = int(cur) if cur is not None else 50
+            except Exception:
+                cur_int = 50
+
+            resp = {
+                "status": "success",
+                "type": "volume",
+                "volume": cur_int
+            }
+            body = json.dumps(resp, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
             self._send_cors_headers()
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))

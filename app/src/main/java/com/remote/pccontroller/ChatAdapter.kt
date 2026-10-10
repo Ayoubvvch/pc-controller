@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.ProgressBar
+import android.widget.SeekBar
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import okhttp3.Call
@@ -20,7 +21,9 @@ import java.io.IOException
 class ChatAdapter(
     private val messages: List<ChatMessage>,
     private val client: OkHttpClient,
-    private val onImageClick: ((String) -> Unit)? = null
+    private val onImageClick: ((String) -> Unit)? = null,
+    private val onVolumeChanged: ((Int) -> Unit)? = null,
+    private val onMuteClick: (() -> Unit)? = null
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
@@ -53,6 +56,7 @@ class ChatAdapter(
             holder.tvMessage.text = item.message
             holder.tvTime.text = item.time
 
+            // Screenshot Handling
             val imageUrl = item.imageUrl
             if (!imageUrl.isNullOrEmpty()) {
                 holder.layoutImageContainer.visibility = View.VISIBLE
@@ -110,6 +114,56 @@ class ChatAdapter(
                 holder.layoutImageContainer.visibility = View.GONE
                 holder.ivScreenshot.setOnClickListener(null)
             }
+
+            // Interactive Volume Control Handling
+            if (item.isVolumeControl) {
+                holder.layoutVolumeControl.visibility = View.VISIBLE
+                holder.tvVolumePercent.text = "${item.volumeLevel}%"
+                holder.sbVolume.progress = item.volumeLevel
+
+                // Prevent RecyclerView vertical scrolling from intercepting horizontal SeekBar drag
+                holder.sbVolume.setOnTouchListener { v, _ ->
+                    v.parent?.requestDisallowInterceptTouchEvent(true)
+                    false
+                }
+
+                holder.sbVolume.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                        if (fromUser) {
+                            item.volumeLevel = progress
+                            holder.tvVolumePercent.text = "$progress%"
+                            onVolumeChanged?.invoke(progress)
+                        }
+                    }
+
+                    override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+
+                    override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                        val progress = seekBar?.progress ?: item.volumeLevel
+                        item.volumeLevel = progress
+                        holder.tvVolumePercent.text = "$progress%"
+                        onVolumeChanged?.invoke(progress)
+                    }
+                })
+
+                val applyPreset = { vol: Int ->
+                    item.volumeLevel = vol
+                    holder.sbVolume.progress = vol
+                    holder.tvVolumePercent.text = "$vol%"
+                    onVolumeChanged?.invoke(vol)
+                }
+
+                holder.btnVolMute.setOnClickListener { onMuteClick?.invoke() }
+                holder.btnVol15.setOnClickListener { applyPreset(15) }
+                holder.btnVol30.setOnClickListener { applyPreset(30) }
+                holder.btnVol50.setOnClickListener { applyPreset(50) }
+                holder.btnVol75.setOnClickListener { applyPreset(75) }
+                holder.btnVol100.setOnClickListener { applyPreset(100) }
+            } else {
+                holder.layoutVolumeControl.visibility = View.GONE
+                holder.sbVolume.setOnSeekBarChangeListener(null)
+                holder.sbVolume.setOnTouchListener(null)
+            }
         }
     }
 
@@ -127,5 +181,14 @@ class ChatAdapter(
         val layoutImageContainer: View = itemView.findViewById(R.id.layoutImageContainer)
         val ivScreenshot: ImageView = itemView.findViewById(R.id.ivScreenshot)
         val pbImageLoading: ProgressBar = itemView.findViewById(R.id.pbImageLoading)
+        val layoutVolumeControl: View = itemView.findViewById(R.id.layoutVolumeControl)
+        val tvVolumePercent: TextView = itemView.findViewById(R.id.tvVolumePercent)
+        val sbVolume: SeekBar = itemView.findViewById(R.id.sbVolume)
+        val btnVolMute: TextView = itemView.findViewById(R.id.btnVolMute)
+        val btnVol15: TextView = itemView.findViewById(R.id.btnVol15)
+        val btnVol30: TextView = itemView.findViewById(R.id.btnVol30)
+        val btnVol50: TextView = itemView.findViewById(R.id.btnVol50)
+        val btnVol75: TextView = itemView.findViewById(R.id.btnVol75)
+        val btnVol100: TextView = itemView.findViewById(R.id.btnVol100)
     }
 }

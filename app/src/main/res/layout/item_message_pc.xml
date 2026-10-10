@@ -66,6 +66,142 @@
                 android:indeterminateTint="@color/accent" />
         </FrameLayout>
 
+        <!-- Interactive Volume Control Container -->
+        <LinearLayout
+            android:id="@+id/layoutVolumeControl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/bg_volume_panel"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <!-- Title & Live Percentage Header -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="🔊 تحكم سريع بالصوت"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvVolumePercent"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="50%"
+                    android:textColor="@color/accent"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- SeekBar Slider -->
+            <SeekBar
+                android:id="@+id/sbVolume"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="6dp"
+                android:max="100"
+                android:progress="50"
+                android:progressBackgroundTint="#334155"
+                android:progressTint="@color/accent"
+                android:thumbTint="@color/accent" />
+
+            <!-- Preset Buttons Row -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/btnVolMute"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_chip_small"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:text="🔇 كتم"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/btnVol15"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_chip_small"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:text="15%"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/btnVol30"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_chip_small"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:text="30%"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/btnVol50"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_chip_small"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:text="50%"
+                        android:textColor="@color/accent"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/btnVol75"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_chip_small"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:text="75%"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/btnVol100"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_chip_small"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:text="100%"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </HorizontalScrollView>
+        </LinearLayout>
+
         <TextView
             android:id="@+id/tvTime"
             android:layout_width="wrap_content"
