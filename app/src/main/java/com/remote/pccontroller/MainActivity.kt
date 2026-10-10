@@ -305,6 +305,8 @@ class MainActivity : AppCompatActivity() {
 
             override fun onResponse(call: Call, response: Response) {
                 val body = response.body?.string() ?: ""
+                var reply = body
+                var imageUrl: String? = null
                 var isVolumeControl = false
                 var volumeLevel = 50
                 try {
