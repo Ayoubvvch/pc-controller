@@ -22,6 +22,8 @@ class ChatAdapter(
     private val messages: List<ChatMessage>,
     private val client: OkHttpClient,
     private val onImageClick: ((String) -> Unit)? = null,
+    private val onImageDownload: ((String) -> Unit)? = null,
+    private val onImageGallery: ((String) -> Unit)? = null,
     private val onVolumeChanged: ((Int) -> Unit)? = null,
     private val onMuteClick: (() -> Unit)? = null
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
@@ -29,7 +31,7 @@ class ChatAdapter(
     companion object {
         private const val TYPE_USER = 1
         private const val TYPE_PC = 2
-        private val imageMemoryCache = LruCache<String, Bitmap>(16 * 1024 * 1024)
+        val imageMemoryCache = LruCache<String, Bitmap>(16 * 1024 * 1024)
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -60,6 +62,7 @@ class ChatAdapter(
             val imageUrl = item.imageUrl
             if (!imageUrl.isNullOrEmpty()) {
                 holder.layoutImageContainer.visibility = View.VISIBLE
+                holder.layoutImageActions.visibility = View.VISIBLE
                 holder.ivScreenshot.tag = imageUrl
 
                 val cached = imageMemoryCache.get(imageUrl)
@@ -107,11 +110,13 @@ class ChatAdapter(
                     })
                 }
 
-                holder.ivScreenshot.setOnClickListener {
-                    onImageClick?.invoke(imageUrl)
-                }
+                holder.ivScreenshot.setOnClickListener { onImageClick?.invoke(imageUrl) }
+                holder.btnQuickZoom.setOnClickListener { onImageClick?.invoke(imageUrl) }
+                holder.btnQuickDownload.setOnClickListener { onImageDownload?.invoke(imageUrl) }
+                holder.btnQuickGallery.setOnClickListener { onImageGallery?.invoke(imageUrl) }
             } else {
                 holder.layoutImageContainer.visibility = View.GONE
+                holder.layoutImageActions.visibility = View.GONE
                 holder.ivScreenshot.setOnClickListener(null)
             }
 
@@ -181,6 +186,10 @@ class ChatAdapter(
         val layoutImageContainer: View = itemView.findViewById(R.id.layoutImageContainer)
         val ivScreenshot: ImageView = itemView.findViewById(R.id.ivScreenshot)
         val pbImageLoading: ProgressBar = itemView.findViewById(R.id.pbImageLoading)
+        val layoutImageActions: View = itemView.findViewById(R.id.layoutImageActions)
+        val btnQuickZoom: TextView = itemView.findViewById(R.id.btnQuickZoom)
+        val btnQuickDownload: TextView = itemView.findViewById(R.id.btnQuickDownload)
+        val btnQuickGallery: TextView = itemView.findViewById(R.id.btnQuickGallery)
         val layoutVolumeControl: View = itemView.findViewById(R.id.layoutVolumeControl)
         val tvVolumePercent: TextView = itemView.findViewById(R.id.tvVolumePercent)
         val sbVolume: SeekBar = itemView.findViewById(R.id.sbVolume)

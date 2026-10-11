@@ -5,8 +5,10 @@ import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import androidx.core.content.FileProvider
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
@@ -96,6 +98,8 @@ class MainActivity : AppCompatActivity() {
             messages = messages,
             client = client,
             onImageClick = { imageUrl -> showFullscreenImage(imageUrl) },
+            onImageDownload = { imageUrl -> saveScreenshotToDevice(imageUrl) },
+            onImageGallery = { imageUrl -> openImageInGallery(imageUrl) },
             onVolumeChanged = { newVolume -> sendVolumeUpdate(newVolume) },
             onMuteClick = { sendCommand("mute") }
         )
@@ -309,6 +313,9 @@ class MainActivity : AppCompatActivity() {
                 var imageUrl: String? = null
                 var isVolumeControl = false
                 var volumeLevel = 50
+                val cmdClean = command.trim().lowercase()
+                val isSoundCmd = cmdClean in listOf("sound", "vol", "volume", "صوت", "s", "mute", "كتم") ||
+                                cmdClean.startsWith("sound") || cmdClean.startsWith("vol") || cmdClean.startsWith("s ")
                 try {
                     val json = JSONObject(body)
                     if (json.has("message")) {
@@ -318,11 +325,14 @@ class MainActivity : AppCompatActivity() {
                         val path = json.getString("image_url")
                         imageUrl = if (path.startsWith("http")) path else "$baseUrl$path"
                     }
-                    if (json.optString("type") == "volume" || json.has("volume")) {
+                    if (isSoundCmd || json.optString("type") == "volume" || json.has("volume")) {
                         isVolumeControl = true
                         volumeLevel = json.optInt("volume", 50)
                     }
                 } catch (ignored: Exception) {
+                    if (isSoundCmd) {
+                        isVolumeControl = true
+                    }
                 }
 
                 runOnUiThread {
@@ -423,37 +433,200 @@ class MainActivity : AppCompatActivity() {
         val ivFullImage = dialog.findViewById<ImageView>(R.id.ivFullImage)
         val pbLoading = dialog.findViewById<ProgressBar>(R.id.pbLoading)
         val btnClose = dialog.findViewById<ImageButton>(R.id.btnClose)
+        val btnOpenGallery = dialog.findViewById<TextView>(R.id.btnOpenGallery)
+        val btnDownloadImage = dialog.findViewById<TextView>(R.id.btnDownloadImage)
+        val btnShareImage = dialog.findViewById<TextView>(R.id.btnShareImage)
+
+        val zoomListener = ZoomTouchListener(ivFullImage)
+        ivFullImage.setOnTouchListener(zoomListener)
 
         btnClose.setOnClickListener { dialog.dismiss() }
-        ivFullImage.setOnClickListener { dialog.dismiss() }
+        btnDownloadImage.setOnClickListener { saveScreenshotToDevice(imageUrl) }
+        btnOpenGallery.setOnClickListener { openImageInGallery(imageUrl) }
+        btnShareImage.setOnClickListener { shareScreenshotImage(imageUrl) }
 
         pbLoading.visibility = View.VISIBLE
+
+        val cached = ChatAdapter.imageMemoryCache.get(imageUrl)
+        if (cached != null) {
+            ivFullImage.setImageBitmap(cached)
+            pbLoading.visibility = View.GONE
+            ivFullImage.post { zoomListener.resetZoom() }
+        } else {
+            val req = Request.Builder().url(imageUrl).build()
+            client.newCall(req).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    runOnUiThread { pbLoading.visibility = View.GONE }
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    if (response.isSuccessful) {
+                        val bytes = response.body?.bytes()
+                        response.close()
+                        if (bytes != null) {
+                            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            if (bitmap != null) {
+                                ChatAdapter.imageMemoryCache.put(imageUrl, bitmap)
+                                runOnUiThread {
+                                    pbLoading.visibility = View.GONE
+                                    ivFullImage.setImageBitmap(bitmap)
+                                    ivFullImage.post { zoomListener.resetZoom() }
+                                }
+                                return
+                            }
+                        }
+                    }
+                    runOnUiThread { pbLoading.visibility = View.GONE }
+                }
+            })
+        }
+
+        dialog.show()
+    }
+
+    private fun saveScreenshotToDevice(imageUrl: String, onFinished: ((File?) -> Unit)? = null) {
+        Toast.makeText(this, "⏳ جاري حفظ لقطة الشاشة...", Toast.LENGTH_SHORT).show()
+        val filename = "Screenshot_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.jpg"
+        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        if (!downloadsDir.exists()) downloadsDir.mkdirs()
+        val targetFile = File(downloadsDir, filename)
+
+        val cachedBitmap = ChatAdapter.imageMemoryCache.get(imageUrl)
+        if (cachedBitmap != null) {
+            try {
+                FileOutputStream(targetFile).use { out ->
+                    cachedBitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+                }
+                android.media.MediaScannerConnection.scanFile(this, arrayOf(targetFile.absolutePath), arrayOf("image/jpeg"), null)
+                Toast.makeText(this, "✅ تم حفظ لقطة الشاشة في مجلد Downloads!", Toast.LENGTH_LONG).show()
+                onFinished?.invoke(targetFile)
+                return
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         val req = Request.Builder().url(imageUrl).build()
         client.newCall(req).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                runOnUiThread { pbLoading.visibility = View.GONE }
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "❌ فشل حفظ الصورة: ${e.message}", Toast.LENGTH_SHORT).show()
+                    onFinished?.invoke(null)
+                }
             }
 
             override fun onResponse(call: Call, response: Response) {
                 if (response.isSuccessful) {
-                    val bytes = response.body?.bytes()
-                    response.close()
-                    if (bytes != null) {
-                        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        runOnUiThread {
-                            pbLoading.visibility = View.GONE
-                            if (bitmap != null) {
-                                ivFullImage.setImageBitmap(bitmap)
-                            }
+                    response.body?.byteStream()?.use { input ->
+                        FileOutputStream(targetFile).use { output ->
+                            input.copyTo(output)
                         }
-                        return
+                    }
+                    android.media.MediaScannerConnection.scanFile(this@MainActivity, arrayOf(targetFile.absolutePath), arrayOf("image/jpeg"), null)
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "✅ تم حفظ لقطة الشاشة في مجلد Downloads بنجاح!", Toast.LENGTH_LONG).show()
+                        onFinished?.invoke(targetFile)
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "❌ فشل حفظ الصورة", Toast.LENGTH_SHORT).show()
+                        onFinished?.invoke(null)
                     }
                 }
-                runOnUiThread { pbLoading.visibility = View.GONE }
             }
         })
+    }
 
-        dialog.show()
+    private fun openImageInGallery(imageUrl: String) {
+        val cacheFile = File(cacheDir, "preview_screenshot.jpg")
+        val cachedBitmap = ChatAdapter.imageMemoryCache.get(imageUrl)
+        if (cachedBitmap != null) {
+            try {
+                FileOutputStream(cacheFile).use { out ->
+                    cachedBitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+                }
+                launchGalleryIntent(cacheFile)
+                return
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        Toast.makeText(this, "⏳ جاري فتح المعرض...", Toast.LENGTH_SHORT).show()
+        val req = Request.Builder().url(imageUrl).build()
+        client.newCall(req).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "❌ تعذر جلب الصورة", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                if (response.isSuccessful) {
+                    response.body?.byteStream()?.use { input ->
+                        FileOutputStream(cacheFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    runOnUiThread { launchGalleryIntent(cacheFile) }
+                }
+            }
+        })
+    }
+
+    private fun launchGalleryIntent(file: File) {
+        try {
+            val uri = FileProvider.getUriForFile(
+                this,
+                "${packageName}.provider",
+                file
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "image/*")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(Intent.createChooser(intent, "عرض في المعرض"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "❌ تعذر فتح تطبيق المعرض: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun shareScreenshotImage(imageUrl: String) {
+        val cacheFile = File(cacheDir, "share_screenshot.jpg")
+        val cachedBitmap = ChatAdapter.imageMemoryCache.get(imageUrl)
+        if (cachedBitmap != null) {
+            try {
+                FileOutputStream(cacheFile).use { out ->
+                    cachedBitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+                }
+                launchShareIntent(cacheFile)
+                return
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        saveScreenshotToDevice(imageUrl) { file ->
+            if (file != null) launchShareIntent(file)
+        }
+    }
+
+    private fun launchShareIntent(file: File) {
+        try {
+            val uri = FileProvider.getUriForFile(
+                this,
+                "${packageName}.provider",
+                file
+            )
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "image/*"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, "مشاركة لقطة الشاشة"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "❌ تعذر مشاركة الصورة: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     // ==========================================
@@ -764,6 +937,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun showVolumeBottomSheet(initialVolume: Int) {
         if (isFinishing || isDestroyed) return
+
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+        imm?.hideSoftInputFromWindow(currentFocus?.windowToken ?: window.decorView.windowToken, 0)
 
         activeVolumeBottomSheet?.let { dialog ->
             if (dialog.isShowing) {

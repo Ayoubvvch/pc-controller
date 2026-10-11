@@ -66,11 +66,65 @@
                 android:indeterminateTint="@color/accent" />
         </FrameLayout>
 
+        <!-- Quick Screenshot Actions under Image -->
+        <LinearLayout
+            android:id="@+id/layoutImageActions"
+            android:layout_width="260dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="6dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/btnQuickZoom"
+                android:layout_width="0dp"
+                android:layout_height="32dp"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_chip_small"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:text="🔍 تكبير"
+                android:textColor="@color/text_primary"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/btnQuickDownload"
+                android:layout_width="0dp"
+                android:layout_height="32dp"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_chip_small"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:text="📥 حفظ"
+                android:textColor="@color/accent"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btnQuickGallery"
+                android:layout_width="0dp"
+                android:layout_height="32dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_chip_small"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:text="🖼️ المعرض"
+                android:textColor="@color/text_primary"
+                android:textSize="11sp" />
+        </LinearLayout>
+
         <!-- Interactive Volume Control Container -->
         <LinearLayout
             android:id="@+id/layoutVolumeControl"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:minWidth="280dp"
             android:layout_marginTop="8dp"
             android:layout_marginBottom="4dp"
             android:background="@drawable/bg_volume_panel"
