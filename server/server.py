@@ -1222,6 +1222,78 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
 
+        elif parsed.path in ["/api/files/send_ssh", "/api/send_ssh", "/send_ssh"]:
+            content_len = int(self.headers.get("Content-Length", 0))
+            post_body = self.rfile.read(content_len).decode("utf-8").strip()
+            try:
+                payload = json.loads(post_body)
+            except Exception:
+                payload = {}
+
+            file_path = payload.get("path", "")
+            dest_dir = payload.get("dest", "/sdcard/Download/")
+            phone_ip = payload.get("phone_ip", "") or self.client_address[0]
+
+            if not file_path or not os.path.exists(file_path):
+                resp = {"status": "error", "message": "❌ الملف المطلوب غير موجود على الحاسوب"}
+                body = json.dumps(resp, ensure_ascii=False).encode("utf-8")
+                self.send_response(400)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            filename = os.path.basename(file_path)
+            size_bytes = os.path.getsize(file_path)
+            size_str = format_size(size_bytes)
+
+            def scp_worker(src, dst_dir, target_ip, fname, sz_str):
+                key_path = os.path.expanduser(r"~/.ssh/id_ed25519")
+                target = f"root@{target_ip}:{dst_dir}"
+                print(f"[SSH] Starting background transfer: '{fname}' ({sz_str}) -> {target}")
+                try:
+                    cmd = ['scp', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=no']
+                    if os.path.exists(key_path):
+                        cmd.extend(['-i', key_path])
+                    cmd.extend([src, target])
+                    res = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+                    if res.returncode == 0:
+                        print(f"[SSH] ✅ Transfer finished successfully: '{fname}' to {target}")
+                    else:
+                        print(f"[SSH] Direct IP transfer failed ({res.stderr.strip()}), falling back to 'phone' host...")
+                        cmd_phone = ['scp', '-o', 'BatchMode=yes', src, f"phone:{dst_dir}"]
+                        res2 = subprocess.run(cmd_phone, capture_output=True, text=True, timeout=1800)
+                        if res2.returncode == 0:
+                            print(f"[SSH] ✅ Transfer finished successfully via 'phone' host: '{fname}'")
+                        else:
+                            print(f"[SSH] ❌ Transfer failed: {res2.stderr.strip()}")
+                except Exception as e:
+                    print(f"[SSH] ❌ Exception during transfer: {e}")
+
+            t = threading.Thread(
+                target=scp_worker,
+                args=(file_path, dest_dir, phone_ip, filename, size_str),
+                daemon=True,
+                name=f"SCP-{filename}"
+            )
+            t.start()
+
+            resp = {
+                "status": "success",
+                "message": f"🚀 بدأ الإرسال عبر SSH إلى هاتفك في الخلفية!\n📁 {filename} ({size_str})\n📍 الوجهة: {dest_dir}",
+                "filename": filename,
+                "size": size_str
+            }
+            body = json.dumps(resp, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
         else:
             self.send_response(404)
             self.end_headers()

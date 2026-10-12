@@ -1005,7 +1005,67 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun downloadFileFromPc(item: PcFileItem) {
-        Toast.makeText(this, "⏳ جاري سحب ${item.name} (${item.sizeStr})...", Toast.LENGTH_SHORT).show()
+        val baseUrl = getBaseUrl()
+        val phoneIp = getPhoneLocalIp() ?: ""
+
+        Toast.makeText(this, "🚀 جاري بدء إرسال ${item.name} عبر SSH...", Toast.LENGTH_SHORT).show()
+
+        val jsonPayload = JSONObject().apply {
+            put("path", item.path)
+            put("name", item.name)
+            put("size", item.sizeStr)
+            put("phone_ip", phoneIp)
+            put("dest", "/sdcard/Download/")
+        }.toString()
+
+        val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+        val req = Request.Builder()
+            .url("$baseUrl/api/files/send_ssh")
+            .post(jsonPayload.toRequestBody(jsonMediaType))
+            .build()
+
+        client.newCall(req).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "⚠️ تعذر إرسال SSH، جاري محاولة التحميل المباشر...", Toast.LENGTH_SHORT).show()
+                    downloadFileHttpFallback(item)
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val body = response.body?.string() ?: ""
+                var message = "🚀 بدأ إرسال ${item.name} عبر SSH إلى هاتفك في الخلفية!"
+                var isSuccess = response.isSuccessful
+                try {
+                    val json = JSONObject(body)
+                    if (json.optString("status") == "success") {
+                        isSuccess = true
+                        message = json.optString("message", message)
+                    } else {
+                        isSuccess = false
+                    }
+                } catch (ignored: Exception) {}
+
+                runOnUiThread {
+                    if (isSuccess) {
+                        Toast.makeText(this@MainActivity, "🚀 بدأ النقل عبر SSH إلى /sdcard/Download!", Toast.LENGTH_LONG).show()
+                        addPcMessage(
+                            "🚀 بدأ إرسال الملف عبر SSH إلى الهاتف!\n" +
+                            "📁 اسم الملف: ${item.name}\n" +
+                            "💾 الحجم: ${item.sizeStr}\n" +
+                            "📍 المجلد: /sdcard/Download/\n" +
+                            "🛡️ النقل يتم عبر SSH في الخلفية؛ يمكنك إغلاق التطبيق أو قفل الشاشة بأمان تام دون انقطاع التحميل."
+                        )
+                    } else {
+                        Toast.makeText(this@MainActivity, "⚠️ تعذر الإرسال عبر SSH، جاري التحميل المباشر...", Toast.LENGTH_SHORT).show()
+                        downloadFileHttpFallback(item)
+                    }
+                }
+            }
+        })
+    }
+
+    private fun downloadFileHttpFallback(item: PcFileItem) {
         val baseUrl = getBaseUrl()
         val encoded = URLEncoder.encode(item.path, "UTF-8")
         val url = "$baseUrl/api/download?path=$encoded"
@@ -1039,14 +1099,6 @@ class MainActivity : AppCompatActivity() {
                                 input.copyTo(output)
                             }
                         }
-
-                        // Notify MediaScanner so file appears in Android Downloads app immediately
-                        android.media.MediaScannerConnection.scanFile(
-                            this@MainActivity,
-                            arrayOf(targetFile.absolutePath),
-                            null,
-                            null
-                        )
 
                         runOnUiThread {
                             Toast.makeText(this@MainActivity, "✅ تم حفظ ${targetFile.name} في مجلد Download بنجاح!", Toast.LENGTH_LONG).show()

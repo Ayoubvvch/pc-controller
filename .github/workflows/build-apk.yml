@@ -31,31 +31,30 @@ jobs:
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Rename APK for release
-        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.0.2.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.0.3.apk
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: PCRemote-APK
-          path: PCRemote-v2.0.2.apk
+          path: PCRemote-v2.0.3.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         with:
-          tag_name: v2.0.2
-          name: "PC Remote App v2.0.2"
+          tag_name: v2.0.3
+          name: "PC Remote App v2.0.3"
           body: |
-            ### 🚀 PC Remote Control Android App (Release v2.0.2)
+            ### 🚀 PC Remote Control Android App (Release v2.0.3)
+            - 🚀 **نقل الملفات المباشر عبر SSH في الخلفية (Direct SSH Background Transfer):**
+              - عند تحميل أو سحب أي ملف من متصفح ملفات الحاسوب، يقوم الحاسوب بنقل الملف مباشرة إلى الهاتف عبر بروتوكول SSH في الخلفية.
+              - لا حاجة لإبقاء التطبيق مفتوحاً؛ يمكنك إغلاق التطبيق أو قفل الشاشة بأمان تام بينما يستمر النقل في الخلفية دون انقطاع.
             - 🛡️ **نظام المرونة العالية والاكتشاف التلقائي (Zero-Config Auto-Discovery):**
-              - لا حاجة لمعرفة أو تغيير عنوان IP يدوياً بعد اليوم عند انقطاع الإنترنت أو تغيّر عنوان الشبكة (DHCP).
-              - اكتشاف تلقائي فائق السرعة عبر UDP Broadcast و Subnet Scan الذكي.
-              - إعادة اتصال وتنفيذ تلقائي وفوري للأوامر عند انقطاع الشبكة دون أي تدخل من المستخدم.
-              - زر بحث تلقائي مدمج داخل شاشة الإعدادات.
+              - اكتشاف تلقائي للـ IP عند انقطاع الإنترنت أو تغيّر الشبكة دون أي إعدادات يدوية.
             - ⚡ **حماية الخادم على الحاسوب (24/7 Watchdog Service):**
-              - خدمة مراقبة وإعادة تشغيل تلقائية لحماية السيرفر من التوقف عند إعادة تشغيل الحاسوب، السكون، أو تعطل الشبكة.
-            - 🔊 **شريط تحكم الصوت الذكي:** تحكم فوري وتفاعلي بنسب مئوية وزر كتم الصوت.
-            - 🔍 **لقطات الشاشة المطورة:** تكبير حتى 5 أضعاف باللمس، نقر مزدوج، فتح في المعرض، وتحميل فوري.
-          files: PCRemote-v2.0.2.apk
+              - خدمة مراقبة وإعادة تشغيل تلقائية تضمن عمل السيرفر على مدار الساعة.
+            - 🔊 **التحكم الذكي في الصوت ولقطات الشاشة المطورة بدعم التكبير والتنزيل.**
+          files: PCRemote-v2.0.3.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
