@@ -1235,22 +1235,80 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
         except Exception:
             pass
 
+UDP_DISCOVERY_PORT = 5051
+
+def start_udp_discovery_responder():
+    """Listens for UDP broadcast discovery pings from the phone app and replies with server details."""
+    def discovery_worker():
+        while True:
+            sock = None
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.bind(("", UDP_DISCOVERY_PORT))
+                while True:
+                    try:
+                        data, addr = sock.recvfrom(1024)
+                        message = data.decode('utf-8', errors='ignore').strip()
+                        if "PC_REMOTE_DISCOVER" in message or "PING" in message or "DISCOVER" in message:
+                            hostname = platform.node() or socket.gethostname()
+                            resp_data = json.dumps({
+                                "service": "pc-remote-controller",
+                                "port": PORT,
+                                "hostname": hostname,
+                                "status": "ready"
+                            })
+                            sock.sendto(resp_data.encode('utf-8'), addr)
+                    except Exception:
+                        break
+            except Exception:
+                pass
+            finally:
+                if sock:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+            time.sleep(2)
+
+    t = threading.Thread(target=discovery_worker, daemon=True, name="UDPDiscoveryResponder")
+    t.start()
+
 def run():
-    server_address = ("0.0.0.0", PORT)
-    httpd = http.server.ThreadingHTTPServer(server_address, RemoteHandler)
-    ips = get_local_ips()
-    print("=" * 60)
-    print(f"🚀 PC Remote Control Server is RUNNING on port {PORT}")
-    print(f"📡 Connect from your phone at any of these URLs:")
-    for ip in ips:
-        print(f"   👉 http://{ip}:{PORT}")
-    print("=" * 60)
-    print("Ready to receive commands from your Android app!")
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("\nServer shutting down gracefully.")
-        httpd.server_close()
+    start_udp_discovery_responder()
+    
+    while True:
+        httpd = None
+        try:
+            server_address = ("0.0.0.0", PORT)
+            httpd = http.server.ThreadingHTTPServer(server_address, RemoteHandler)
+            httpd.allow_reuse_address = True
+            httpd.daemon_threads = True
+            ips = get_local_ips()
+            print("=" * 60)
+            print(f"🚀 PC Remote Control Server is RUNNING on port {PORT}")
+            print(f"📡 Connect from your phone at any of these URLs:")
+            for ip in ips:
+                print(f"   👉 http://{ip}:{PORT}")
+            print("=" * 60)
+            print("Ready to receive commands from your Android app!")
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\nServer shutting down gracefully.")
+            if httpd:
+                try:
+                    httpd.server_close()
+                except Exception:
+                    pass
+            break
+        except Exception as e:
+            print(f"⚠️ Server loop encountered error: {e}. Auto-restarting server in 2 seconds...")
+            if httpd:
+                try:
+                    httpd.server_close()
+                except Exception:
+                    pass
+            time.sleep(2)
 
 if __name__ == "__main__":
     run()

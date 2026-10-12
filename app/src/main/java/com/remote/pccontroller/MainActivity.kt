@@ -43,10 +43,20 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.InetAddress
+import java.net.Inet4Address
+import java.net.NetworkInterface
+import java.net.HttpURLConnection
+import java.net.URL
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 class MainActivity : AppCompatActivity() {
 
@@ -143,7 +153,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnSettings.setOnClickListener { showSettingsDialog() }
-        btnRefresh.setOnClickListener { checkConnection() }
+        btnRefresh.setOnClickListener { checkConnection(autoDiscoverOnFail = true) }
+        tvConnectionStatus.setOnClickListener { checkConnection(autoDiscoverOnFail = true) }
 
         // Setup Quick Action Chips
         setupQuickChips()
@@ -244,12 +255,182 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun getBaseUrl(): String {
-        val ip = prefs.getString("pc_ip", "192.168.11.109") ?: "192.168.11.109"
+        val ip = prefs.getString("pc_ip", "192.168.11.110") ?: "192.168.11.110"
         val port = prefs.getString("pc_port", "5050") ?: "5050"
         return "http://$ip:$port"
     }
 
-    private fun checkConnection() {
+    private var isDiscovering = false
+
+    private fun discoverPcServer(
+        onSuccess: (String) -> Unit,
+        onFailed: (() -> Unit)? = null
+    ) {
+        if (isDiscovering) return
+        isDiscovering = true
+
+        runOnUiThread {
+            tvConnectionStatus.text = "🟡 جاري البحث التلقائي عن الحاسوب في الشبكة..."
+            tvConnectionStatus.setTextColor(Color.parseColor("#F59E0B"))
+        }
+
+        Thread {
+            val port = prefs.getString("pc_port", "5050") ?: "5050"
+            var foundIp: String? = null
+
+            // 1. Try Fast UDP Broadcast Discovery (~10-50ms)
+            try {
+                val udpSocket = DatagramSocket()
+                udpSocket.broadcast = true
+                udpSocket.soTimeout = 1200
+                val sendData = "PC_REMOTE_DISCOVER".toByteArray()
+
+                // Broadcast to 255.255.255.255
+                val broadcastAddr = InetAddress.getByName("255.255.255.255")
+                val sendPacket = DatagramPacket(sendData, sendData.size, broadcastAddr, 5051)
+                udpSocket.send(sendPacket)
+
+                // Also send to local subnet broadcast
+                val localSubnetBroadcast = getSubnetBroadcastAddress()
+                if (localSubnetBroadcast != null) {
+                    val subPacket = DatagramPacket(sendData, sendData.size, localSubnetBroadcast, 5051)
+                    udpSocket.send(subPacket)
+                }
+
+                val buf = ByteArray(1024)
+                val recvPacket = DatagramPacket(buf, buf.size)
+                udpSocket.receive(recvPacket)
+                val respStr = String(recvPacket.data, 0, recvPacket.length)
+                if (respStr.contains("pc-remote-controller") || respStr.contains("ready") || respStr.contains("status")) {
+                    foundIp = recvPacket.address.hostAddress
+                }
+                udpSocket.close()
+            } catch (ignored: Exception) {}
+
+            // 2. Fallback: Fast Parallel Subnet Probe (if router filters UDP broadcast)
+            if (foundIp == null) {
+                foundIp = scanSubnetForServer(port)
+            }
+
+            isDiscovering = false
+
+            runOnUiThread {
+                if (foundIp != null) {
+                    prefs.edit().putString("pc_ip", foundIp).apply()
+                    val newBaseUrl = "http://$foundIp:$port"
+                    tvConnectionStatus.text = "🟢 متصل ($newBaseUrl)"
+                    tvConnectionStatus.setTextColor(Color.parseColor("#10B981"))
+                    Toast.makeText(this@MainActivity, "🔍 تم العثور على الحاسوب: $foundIp", Toast.LENGTH_SHORT).show()
+                    onSuccess(foundIp)
+                } else {
+                    onFailed?.invoke()
+                }
+            }
+        }.start()
+    }
+
+    private fun getSubnetBroadcastAddress(): InetAddress? {
+        try {
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val networkInterface = interfaces.nextElement()
+                if (networkInterface.isLoopback || !networkInterface.isUp) continue
+                for (interfaceAddress in networkInterface.interfaceAddresses) {
+                    val broadcast = interfaceAddress.broadcast
+                    if (broadcast != null) return broadcast
+                }
+            }
+        } catch (ignored: Exception) {}
+        return null
+    }
+
+    private fun getPhoneLocalIp(): String? {
+        try {
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val networkInterface = interfaces.nextElement()
+                if (networkInterface.isLoopback || !networkInterface.isUp) continue
+                val addrs = networkInterface.inetAddresses
+                while (addrs.hasMoreElements()) {
+                    val addr = addrs.nextElement()
+                    if (!addr.isLoopbackAddress && addr is Inet4Address) {
+                        val host = addr.hostAddress
+                        if (host != null && (host.startsWith("192.168.") || host.startsWith("10.") || host.startsWith("172."))) {
+                            return host
+                        }
+                    }
+                }
+            }
+        } catch (ignored: Exception) {}
+        return null
+    }
+
+    private fun scanSubnetForServer(port: String): String? {
+        try {
+            val phoneIp = getPhoneLocalIp() ?: return null
+            val parts = phoneIp.split(".")
+            if (parts.size != 4) return null
+            val prefix = "${parts[0]}.${parts[1]}.${parts[2]}."
+
+            val candidateIps = mutableListOf<String>()
+            val currentConfiguredIp = prefs.getString("pc_ip", null)
+            if (!currentConfiguredIp.isNullOrEmpty() && currentConfiguredIp.startsWith(prefix)) {
+                candidateIps.add(currentConfiguredIp)
+            }
+            // Add priority range (common DHCP leases)
+            for (i in 100..125) {
+                val ip = "$prefix$i"
+                if (!candidateIps.contains(ip) && ip != phoneIp) candidateIps.add(ip)
+            }
+            // Add remaining subnet range
+            for (i in 1..254) {
+                val ip = "$prefix$i"
+                if (!candidateIps.contains(ip) && ip != phoneIp) candidateIps.add(ip)
+            }
+
+            val found = AtomicReference<String?>(null)
+            val executor = Executors.newFixedThreadPool(25)
+
+            for (ip in candidateIps) {
+                if (found.get() != null) break
+                executor.execute {
+                    if (found.get() != null) return@execute
+                    if (pingServerCandidate(ip, port)) {
+                        found.compareAndSet(null, ip)
+                    }
+                }
+            }
+
+            executor.shutdown()
+            executor.awaitTermination(3, TimeUnit.SECONDS)
+            executor.shutdownNow()
+
+            return found.get()
+        } catch (ignored: Exception) {
+            return null
+        }
+    }
+
+    private fun pingServerCandidate(ip: String, port: String): Boolean {
+        try {
+            val url = URL("http://$ip:$port/ping")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.connectTimeout = 400
+            conn.readTimeout = 400
+            conn.requestMethod = "GET"
+            conn.instanceFollowRedirects = false
+            val code = conn.responseCode
+            if (code == 200) {
+                val text = conn.inputStream.bufferedReader().use { it.readText() }
+                conn.disconnect()
+                return text.contains("الحاسوب متصل") || text.contains("success")
+            }
+            conn.disconnect()
+        } catch (ignored: Exception) {}
+        return false
+    }
+
+    private fun checkConnection(autoDiscoverOnFail: Boolean = true) {
         val baseUrl = getBaseUrl()
         tvConnectionStatus.text = "🟡 جاري الفحص... ($baseUrl)"
         tvConnectionStatus.setTextColor(Color.parseColor("#F59E0B"))
@@ -262,8 +443,20 @@ class MainActivity : AppCompatActivity() {
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 runOnUiThread {
-                    tvConnectionStatus.text = "🔴 غير متصل ($baseUrl)"
-                    tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
+                    if (autoDiscoverOnFail) {
+                        discoverPcServer(
+                            onSuccess = {
+                                checkConnection(autoDiscoverOnFail = false)
+                            },
+                            onFailed = {
+                                tvConnectionStatus.text = "🔴 غير متصل ($baseUrl)"
+                                tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
+                            }
+                        )
+                    } else {
+                        tvConnectionStatus.text = "🔴 غير متصل ($baseUrl)"
+                        tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
+                    }
                 }
             }
 
@@ -283,8 +476,10 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    private fun sendCommand(command: String) {
-        addUserMessage(command)
+    private fun sendCommand(command: String, isRetry: Boolean = false) {
+        if (!isRetry) {
+            addUserMessage(command)
+        }
 
         val baseUrl = getBaseUrl()
         val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -301,9 +496,25 @@ class MainActivity : AppCompatActivity() {
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 runOnUiThread {
-                    addPcMessage("❌ تعذر الاتصال بالحاسوب ($baseUrl)\nتأكد أن السيرفر يعمل وعلى نفس شبكة الواي فاي.")
-                    tvConnectionStatus.text = "🔴 غير متصل ($baseUrl)"
-                    tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
+                    if (!isRetry) {
+                        // Automatically discover PC and retry execution!
+                        tvConnectionStatus.text = "🟡 جاري البحث التلقائي عن الحاسوب..."
+                        tvConnectionStatus.setTextColor(Color.parseColor("#F59E0B"))
+                        discoverPcServer(
+                            onSuccess = {
+                                sendCommand(command, isRetry = true)
+                            },
+                            onFailed = {
+                                addPcMessage("❌ تعذر الاتصال بالحاسوب ($baseUrl)\nتم فحص الشبكة بالكامل ولم يتم العثور على السيرفر.\nتأكد أن سيرفر server.py يعمل على الحاسوب وهاتفك متصل بنفس الواي فاي.")
+                                tvConnectionStatus.text = "🔴 غير متصل ($baseUrl)"
+                                tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
+                            }
+                        )
+                    } else {
+                        addPcMessage("❌ تعذر الاتصال بالحاسوب ($baseUrl)\nتأكد أن السيرفر يعمل وعلى نفس شبكة الواي فاي.")
+                        tvConnectionStatus.text = "🔴 غير متصل ($baseUrl)"
+                        tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
+                    }
                 }
             }
 
@@ -1011,9 +1222,24 @@ class MainActivity : AppCompatActivity() {
         val view = LayoutInflater.from(this).inflate(R.layout.dialog_settings, null)
         val etIp = view.findViewById<EditText>(R.id.etIpAddress)
         val etPort = view.findViewById<EditText>(R.id.etPort)
+        val btnAutoDiscover = view.findViewById<View>(R.id.btnAutoDiscover)
+        val tvAutoDiscoverText = view.findViewById<TextView>(R.id.tvAutoDiscoverText)
 
-        etIp.setText(prefs.getString("pc_ip", "192.168.11.109"))
+        etIp.setText(prefs.getString("pc_ip", "192.168.11.110"))
         etPort.setText(prefs.getString("pc_port", "5050"))
+
+        btnAutoDiscover?.setOnClickListener {
+            tvAutoDiscoverText?.text = "⏳ جاري البحث في الشبكة..."
+            discoverPcServer(
+                onSuccess = { foundIp ->
+                    etIp.setText(foundIp)
+                    tvAutoDiscoverText?.text = "✅ تم العثور على الحاسوب: $foundIp"
+                },
+                onFailed = {
+                    tvAutoDiscoverText?.text = "❌ لم يتم العثور على الحاسوب، تأكد من تشغيل السيرفر"
+                }
+            )
+        }
 
         AlertDialog.Builder(this)
             .setView(view)

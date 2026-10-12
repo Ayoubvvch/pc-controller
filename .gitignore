@@ -14,3 +14,4 @@ __pycache__/
 *.log
 screenshots/
 server/screenshots/
+*.apk

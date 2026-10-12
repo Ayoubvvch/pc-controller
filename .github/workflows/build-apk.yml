@@ -31,33 +31,31 @@ jobs:
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Rename APK for release
-        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.0.1.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.0.2.apk
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: PCRemote-APK
-          path: PCRemote-v2.0.1.apk
+          path: PCRemote-v2.0.2.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         with:
-          tag_name: v2.0.1
-          name: "PC Remote App v2.0.1"
+          tag_name: v2.0.2
+          name: "PC Remote App v2.0.2"
           body: |
-            ### 🚀 PC Remote Control Android App (Release v2.0.1)
-            - 🔊 **إصلاح وتحسين شريط التحكم في الصوت (Volume Slider):**
-              - ظهور شريط الصوت تلقائياً وفورياً عند إرسال أمر `sound` أو `vol`.
-              - شريط تحكم مدمج داخل المحادثة ولوحة تحكم سريعة (Bottom Sheet) مع أزرار النسب المئوية (15%, 30%, 50%, 75%, 100%) وزر كتم الصوت.
-            - 🔍 **تكبير ومعاينة لقطات الشاشة بدقة عالية (Pinch-to-Zoom & Pan):**
-              - دعم كامل للتكبير باللمس (Pinch-to-zoom) حتى 5 أضعاف، والتحريك السلس، والنقر المزدوج (Double-tap) للتكبير التلقائي وإعادة الضبط.
-            - 🖼️ **فتح لقطات الشاشة مباشرة في معرض الصور (Open in Gallery):**
-              - زر سريع لفتح لقطة الشاشة في تطبيق المعرض المفضل في هاتفك بدون أي تعقيد.
-            - 📥 **تحميل وحفظ لقطات الشاشة في الهاتف (Save to Downloads):**
-              - حفظ فوري ومباشر في مجلد Downloads مع تحديث فوري للمعرض.
-            - 🛡️ **تطبيق نظيف وخفيف بدون روت:**
-              - متصفح ملفات PC وسحب الملفات، أوامر الطاقة مع تأكيد الأمان ومؤقتات النوم.
-          files: PCRemote-v2.0.1.apk
+            ### 🚀 PC Remote Control Android App (Release v2.0.2)
+            - 🛡️ **نظام المرونة العالية والاكتشاف التلقائي (Zero-Config Auto-Discovery):**
+              - لا حاجة لمعرفة أو تغيير عنوان IP يدوياً بعد اليوم عند انقطاع الإنترنت أو تغيّر عنوان الشبكة (DHCP).
+              - اكتشاف تلقائي فائق السرعة عبر UDP Broadcast و Subnet Scan الذكي.
+              - إعادة اتصال وتنفيذ تلقائي وفوري للأوامر عند انقطاع الشبكة دون أي تدخل من المستخدم.
+              - زر بحث تلقائي مدمج داخل شاشة الإعدادات.
+            - ⚡ **حماية الخادم على الحاسوب (24/7 Watchdog Service):**
+              - خدمة مراقبة وإعادة تشغيل تلقائية لحماية السيرفر من التوقف عند إعادة تشغيل الحاسوب، السكون، أو تعطل الشبكة.
+            - 🔊 **شريط تحكم الصوت الذكي:** تحكم فوري وتفاعلي بنسب مئوية وزر كتم الصوت.
+            - 🔍 **لقطات الشاشة المطورة:** تكبير حتى 5 أضعاف باللمس، نقر مزدوج، فتح في المعرض، وتحميل فوري.
+          files: PCRemote-v2.0.2.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
