@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android APK & Release Server
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Debug APK
+    name: Build APK and Package Server
     runs-on: ubuntu-latest
 
     steps:
@@ -31,30 +31,51 @@ jobs:
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Rename APK for release
-        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.0.3.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.0.4.apk
 
-      - name: Upload Artifact
+      - name: Package Windows Server Bundle
+        run: |
+          zip -r pc-controller-server-windows.zip server -x "server/*.log" "server/__pycache__/*" "server/screenshots/*" "server/*.pyc" "server/power_timer.json"
+
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: PCRemote-APK
-          path: PCRemote-v2.0.3.apk
+          path: PCRemote-v2.0.4.apk
+
+      - name: Upload Server Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PC-Controller-Server
+          path: pc-controller-server-windows.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         with:
-          tag_name: v2.0.3
-          name: "PC Remote App v2.0.3"
+          tag_name: v2.0.4
+          name: "PC Remote v2.0.4"
           body: |
-            ### 🚀 PC Remote Control Android App (Release v2.0.3)
-            - 🚀 **نقل الملفات المباشر عبر SSH في الخلفية (Direct SSH Background Transfer):**
-              - عند تحميل أو سحب أي ملف من متصفح ملفات الحاسوب، يقوم الحاسوب بنقل الملف مباشرة إلى الهاتف عبر بروتوكول SSH في الخلفية.
-              - لا حاجة لإبقاء التطبيق مفتوحاً؛ يمكنك إغلاق التطبيق أو قفل الشاشة بأمان تام بينما يستمر النقل في الخلفية دون انقطاع.
-            - 🛡️ **نظام المرونة العالية والاكتشاف التلقائي (Zero-Config Auto-Discovery):**
-              - اكتشاف تلقائي للـ IP عند انقطاع الإنترنت أو تغيّر الشبكة دون أي إعدادات يدوية.
-            - ⚡ **حماية الخادم على الحاسوب (24/7 Watchdog Service):**
-              - خدمة مراقبة وإعادة تشغيل تلقائية تضمن عمل السيرفر على مدار الساعة.
-            - 🔊 **التحكم الذكي في الصوت ولقطات الشاشة المطورة بدعم التكبير والتنزيل.**
-          files: PCRemote-v2.0.3.apk
+            ### 🚀 PC Remote Control (Release v2.0.4)
+
+            #### 📦 Downloads
+            * **📱 For Android Phones:** Download **`PCRemote-v2.0.4.apk`** below and install on your phone.
+            * **💻 For Windows PCs:** Download **`pc-controller-server-windows.zip`** below, extract anywhere, and double-click **`start.bat`**.
+
+            ---
+
+            #### ✨ What's New in v2.0.4:
+            * 🌐 **Full English Interface & Documentation:** The entire mobile app UI, layout resources, server API responses, and setup guides are now completely in English.
+            * ⚡ **Persistent Power Scheduler:** Scheduled sleep/shutdown timers (`sleep 15m`, `shutdown 30m`) are preserved across screen locks (`Win + L`) and server restarts with Windows kernel backups.
+            * 📂 **Smart Media Download Routing:** Photos and videos downloaded via remote explorer or background SSH are now automatically directed to `/sdcard/Pictures/` for instant gallery visibility, while documents go to `/sdcard/Download/`.
+            * 🛠️ **Simplified One-Click Windows Tooling:**
+              * `start.bat`: Launch server and self-healing watchdog in the background.
+              * `stop.bat`: Cleanly stop server processes.
+              * `status.bat`: Live health check and local IP inspector.
+              * `install_autostart.bat` & `uninstall_autostart.bat`: Toggle automatic Windows boot startup without admin prompts.
+            * 📸 **Enhanced Multi-Monitor Previews:** Dual-display support with pinch-to-zoom and direct native share-sheet integration.
+          files: |
+            PCRemote-v2.0.4.apk
+            pc-controller-server-windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

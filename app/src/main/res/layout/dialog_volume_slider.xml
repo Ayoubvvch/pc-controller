@@ -37,7 +37,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="10dp"
             android:layout_weight="1"
-            android:text="التحكم في صوت الحاسوب"
+            android:text="PC Volume Control"
             android:textColor="@color/text_primary"
             android:textSize="17sp"
             android:textStyle="bold" />
@@ -97,7 +97,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginBottom="8dp"
-        android:text="اختصارات سريعة:"
+        android:text="Quick Presets:"
         android:textColor="@color/text_secondary"
         android:textSize="13sp" />
 
@@ -120,7 +120,7 @@
                 android:background="@drawable/bg_chip_small"
                 android:clickable="true"
                 android:focusable="true"
-                android:text="🔇 كتم"
+                android:text="🔇 Mute"
                 android:textColor="@color/text_primary"
                 android:textSize="13sp" />
 
@@ -194,7 +194,7 @@
         android:clickable="true"
         android:focusable="true"
         android:gravity="center"
-        android:text="تم / إغلاق"
+        android:text="Done / Close"
         android:textColor="@color/text_primary"
         android:textSize="14sp"
         android:textStyle="bold" />

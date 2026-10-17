@@ -120,10 +120,10 @@ class MainActivity : AppCompatActivity() {
 
         // Welcome message
         addPcMessage(
-            "👋 مرحباً بك في لوحة تحكم الحاسوب!\n" +
-            "• 📁 لتصفح وسحب ملفات الحاسوب: اضغط زر المجلد بالأعلى.\n" +
-            "• 📸 لتصوير الشاشة: يدعم الشاشتين معاً، أو شاشة 1 أو 2.\n" +
-            "• 📎 لإرسال ملفات للحاسوب: اضغط زر المشبك بجانب الكتابة."
+            "👋 Welcome to PC Controller!\n" +
+            "• 📁 Browse & download files: Tap the folder icon above.\n" +
+            "• 📸 Screen capture: Supports both displays or Display 1/2.\n" +
+            "• 📎 Send files to PC: Tap the attachment clip next to the text input."
         )
 
         // Button listeners
@@ -185,14 +185,14 @@ class MainActivity : AppCompatActivity() {
             }
 
             if (uri != null) {
-                Toast.makeText(this, "🚀 جاري إرسال الملف المشارك إلى الحاسوب...", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "🚀 Sending shared file to PC...", Toast.LENGTH_SHORT).show()
                 uploadFileToPc(uri)
             } else {
                 val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
                 if (!sharedText.isNullOrBlank()) {
                     val trimmed = sharedText.trim()
                     if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-                        Toast.makeText(this, "🌐 فتح الرابط في متصفح الحاسوب...", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "🌐 Opening link in PC browser...", Toast.LENGTH_SHORT).show()
                         sendCommand("open $trimmed")
                     } else {
                         sendCommand(trimmed)
@@ -208,7 +208,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             if (!uris.isNullOrEmpty()) {
-                Toast.makeText(this, "🚀 جاري إرسال ${uris.size} ملفات مشاركة إلى الحاسوب...", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "🚀 Sending ${uris.size} shared files to PC...", Toast.LENGTH_SHORT).show()
                 for (u in uris) {
                     uploadFileToPc(u)
                 }
@@ -234,12 +234,12 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.chipStatus)?.setOnClickListener { sendCommand("status") }
         findViewById<TextView>(R.id.chipCancel)?.setOnClickListener { sendCommand("stop") }
         findViewById<TextView>(R.id.chipRestart)?.setOnClickListener {
-            showConfirmationDialog("إعادة التشغيل", "هل تريد بالتأكيد إعادة تشغيل الحاسوب؟") {
+            showConfirmationDialog("Restart PC", "Are you sure you want to restart the PC?") {
                 sendCommand("restart")
             }
         }
         findViewById<TextView>(R.id.chipShutdown)?.setOnClickListener {
-            showConfirmationDialog("إيقاف التشغيل", "هل تريد بالتأكيد إيقاف تشغيل الحاسوب؟") {
+            showConfirmationDialog("Shutdown PC", "Are you sure you want to shut down the PC?") {
                 sendCommand("shutdown")
             }
         }
@@ -249,8 +249,8 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle(title)
             .setMessage(message)
-            .setPositiveButton("نعم") { _, _ -> onConfirm() }
-            .setNegativeButton("إلغاء", null)
+            .setPositiveButton("Yes") { _, _ -> onConfirm() }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 
@@ -270,7 +270,7 @@ class MainActivity : AppCompatActivity() {
         isDiscovering = true
 
         runOnUiThread {
-            tvConnectionStatus.text = "🟡 جاري البحث التلقائي عن الحاسوب في الشبكة..."
+            tvConnectionStatus.text = "🟡 Auto-discovering PC in network..."
             tvConnectionStatus.setTextColor(Color.parseColor("#F59E0B"))
         }
 
@@ -318,9 +318,9 @@ class MainActivity : AppCompatActivity() {
                 if (foundIp != null) {
                     prefs.edit().putString("pc_ip", foundIp).apply()
                     val newBaseUrl = "http://$foundIp:$port"
-                    tvConnectionStatus.text = "🟢 متصل ($newBaseUrl)"
+                    tvConnectionStatus.text = "🟢 Connected ($newBaseUrl)"
                     tvConnectionStatus.setTextColor(Color.parseColor("#10B981"))
-                    Toast.makeText(this@MainActivity, "🔍 تم العثور على الحاسوب: $foundIp", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "🔍 Found PC: $foundIp", Toast.LENGTH_SHORT).show()
                     onSuccess(foundIp)
                 } else {
                     onFailed?.invoke()
@@ -423,7 +423,7 @@ class MainActivity : AppCompatActivity() {
             if (code == 200) {
                 val text = conn.inputStream.bufferedReader().use { it.readText() }
                 conn.disconnect()
-                return text.contains("الحاسوب متصل") || text.contains("success")
+                return text.contains("status") || text.contains("success") || text.contains("online") || text.contains("ok")
             }
             conn.disconnect()
         } catch (ignored: Exception) {}
@@ -432,7 +432,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkConnection(autoDiscoverOnFail: Boolean = true) {
         val baseUrl = getBaseUrl()
-        tvConnectionStatus.text = "🟡 جاري الفحص... ($baseUrl)"
+        tvConnectionStatus.text = "🟡 Checking... ($baseUrl)"
         tvConnectionStatus.setTextColor(Color.parseColor("#F59E0B"))
 
         val request = Request.Builder()
@@ -449,12 +449,12 @@ class MainActivity : AppCompatActivity() {
                                 checkConnection(autoDiscoverOnFail = false)
                             },
                             onFailed = {
-                                tvConnectionStatus.text = "🔴 غير متصل ($baseUrl)"
+                                tvConnectionStatus.text = "🔴 Disconnected ($baseUrl)"
                                 tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
                             }
                         )
                     } else {
-                        tvConnectionStatus.text = "🔴 غير متصل ($baseUrl)"
+                        tvConnectionStatus.text = "🔴 Disconnected ($baseUrl)"
                         tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
                     }
                 }
@@ -465,10 +465,10 @@ class MainActivity : AppCompatActivity() {
                 response.close()
                 runOnUiThread {
                     if (successful) {
-                        tvConnectionStatus.text = "🟢 متصل ($baseUrl)"
+                        tvConnectionStatus.text = "🟢 Connected ($baseUrl)"
                         tvConnectionStatus.setTextColor(Color.parseColor("#10B981"))
                     } else {
-                        tvConnectionStatus.text = "🔴 خطأ في الاستجابة ($baseUrl)"
+                        tvConnectionStatus.text = "🔴 Response Error ($baseUrl)"
                         tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
                     }
                 }
@@ -498,21 +498,21 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     if (!isRetry) {
                         // Automatically discover PC and retry execution!
-                        tvConnectionStatus.text = "🟡 جاري البحث التلقائي عن الحاسوب..."
+                        tvConnectionStatus.text = "🟡 Auto-discovering PC in network..."
                         tvConnectionStatus.setTextColor(Color.parseColor("#F59E0B"))
                         discoverPcServer(
                             onSuccess = {
                                 sendCommand(command, isRetry = true)
                             },
                             onFailed = {
-                                addPcMessage("❌ تعذر الاتصال بالحاسوب ($baseUrl)\nتم فحص الشبكة بالكامل ولم يتم العثور على السيرفر.\nتأكد أن سيرفر server.py يعمل على الحاسوب وهاتفك متصل بنفس الواي فاي.")
-                                tvConnectionStatus.text = "🔴 غير متصل ($baseUrl)"
+                                addPcMessage("❌ Could not connect to PC ($baseUrl)\nNetwork scan completed with no response.\nEnsure server.py is running on your PC and both devices are on the same Wi-Fi network.")
+                                tvConnectionStatus.text = "🔴 Disconnected ($baseUrl)"
                                 tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
                             }
                         )
                     } else {
-                        addPcMessage("❌ تعذر الاتصال بالحاسوب ($baseUrl)\nتأكد أن السيرفر يعمل وعلى نفس شبكة الواي فاي.")
-                        tvConnectionStatus.text = "🔴 غير متصل ($baseUrl)"
+                        addPcMessage("❌ Could not connect to PC ($baseUrl)\nEnsure the server is running and connected to Wi-Fi.")
+                        tvConnectionStatus.text = "🔴 Disconnected ($baseUrl)"
                         tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
                     }
                 }
@@ -547,10 +547,10 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 runOnUiThread {
-                    tvConnectionStatus.text = "🟢 متصل ($baseUrl)"
+                    tvConnectionStatus.text = "🟢 Connected ($baseUrl)"
                     tvConnectionStatus.setTextColor(Color.parseColor("#10B981"))
                     addPcMessage(
-                        if (reply.isNotEmpty()) reply else "✅ تم استلام الأمر بنجاح.",
+                        if (reply.isNotEmpty()) reply else "✅ Command received successfully.",
                         imageUrl = imageUrl,
                         isVolumeControl = isVolumeControl,
                         volumeLevel = volumeLevel
@@ -586,7 +586,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val sizeFormatted = formatFileSize(fileSize)
-        addUserMessage("📎 جاري إرسال: $fileName ($sizeFormatted)")
+        addUserMessage("📎 Sending: $fileName ($sizeFormatted)")
 
         val baseUrl = getBaseUrl()
         val encodedName = Base64.encodeToString(fileName.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
@@ -614,7 +614,7 @@ class MainActivity : AppCompatActivity() {
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 runOnUiThread {
-                    addPcMessage("❌ فشل إرسال الملف إلى الحاسوب: ${e.message}")
+                    addPcMessage("❌ Failed to send file to PC: ${e.message}")
                 }
             }
 
@@ -630,7 +630,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 runOnUiThread {
-                    addPcMessage(if (reply.isNotEmpty()) reply else "✅ تم استلام الملف بنجاح في Downloads!")
+                    addPcMessage(if (reply.isNotEmpty()) reply else "✅ File received successfully in PC Downloads!")
                 }
             }
         })
@@ -696,7 +696,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveScreenshotToDevice(imageUrl: String, onFinished: ((File?) -> Unit)? = null) {
-        Toast.makeText(this, "⏳ جاري حفظ لقطة الشاشة...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "⏳ Saving screenshot...", Toast.LENGTH_SHORT).show()
         val filename = "Screenshot_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.jpg"
         val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         if (!downloadsDir.exists()) downloadsDir.mkdirs()
@@ -709,7 +709,7 @@ class MainActivity : AppCompatActivity() {
                     cachedBitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
                 }
                 android.media.MediaScannerConnection.scanFile(this, arrayOf(targetFile.absolutePath), arrayOf("image/jpeg"), null)
-                Toast.makeText(this, "✅ تم حفظ لقطة الشاشة في مجلد Downloads!", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "✅ Screenshot saved to Downloads folder!", Toast.LENGTH_LONG).show()
                 onFinished?.invoke(targetFile)
                 return
             } catch (e: Exception) {
@@ -721,7 +721,7 @@ class MainActivity : AppCompatActivity() {
         client.newCall(req).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 runOnUiThread {
-                    Toast.makeText(this@MainActivity, "❌ فشل حفظ الصورة: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "❌ Failed to save image: ${e.message}", Toast.LENGTH_SHORT).show()
                     onFinished?.invoke(null)
                 }
             }
@@ -735,12 +735,12 @@ class MainActivity : AppCompatActivity() {
                     }
                     android.media.MediaScannerConnection.scanFile(this@MainActivity, arrayOf(targetFile.absolutePath), arrayOf("image/jpeg"), null)
                     runOnUiThread {
-                        Toast.makeText(this@MainActivity, "✅ تم حفظ لقطة الشاشة في مجلد Downloads بنجاح!", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@MainActivity, "✅ Screenshot saved to Downloads folder successfully!", Toast.LENGTH_LONG).show()
                         onFinished?.invoke(targetFile)
                     }
                 } else {
                     runOnUiThread {
-                        Toast.makeText(this@MainActivity, "❌ فشل حفظ الصورة", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "❌ Failed to save image", Toast.LENGTH_SHORT).show()
                         onFinished?.invoke(null)
                     }
                 }
@@ -763,12 +763,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        Toast.makeText(this, "⏳ جاري فتح المعرض...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "⏳ Opening gallery...", Toast.LENGTH_SHORT).show()
         val req = Request.Builder().url(imageUrl).build()
         client.newCall(req).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 runOnUiThread {
-                    Toast.makeText(this@MainActivity, "❌ تعذر جلب الصورة", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "❌ Failed to fetch image", Toast.LENGTH_SHORT).show()
                 }
             }
 
@@ -797,9 +797,9 @@ class MainActivity : AppCompatActivity() {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            startActivity(Intent.createChooser(intent, "عرض في المعرض"))
+            startActivity(Intent.createChooser(intent, "Open in Gallery"))
         } catch (e: Exception) {
-            Toast.makeText(this, "❌ تعذر فتح تطبيق المعرض: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "❌ Could not open gallery app: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -834,9 +834,9 @@ class MainActivity : AppCompatActivity() {
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            startActivity(Intent.createChooser(intent, "مشاركة لقطة الشاشة"))
+            startActivity(Intent.createChooser(intent, "Share Screenshot"))
         } catch (e: Exception) {
-            Toast.makeText(this, "❌ تعذر مشاركة الصورة: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "❌ Could not share image: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -890,7 +890,7 @@ class MainActivity : AppCompatActivity() {
                 override fun onFailure(call: Call, e: IOException) {
                     runOnUiThread {
                         pbBrowserLoading.visibility = View.GONE
-                        Toast.makeText(this@MainActivity, "تعذر تحميل المجلد: ${e.message}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "Could not load folder: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 }
 
@@ -1008,14 +1008,18 @@ class MainActivity : AppCompatActivity() {
         val baseUrl = getBaseUrl()
         val phoneIp = getPhoneLocalIp() ?: ""
 
-        Toast.makeText(this, "🚀 جاري بدء إرسال ${item.name} عبر SSH...", Toast.LENGTH_SHORT).show()
+        val ext = item.name.substringAfterLast('.', "").lowercase()
+        val isMedia = ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "svg", "raw", "dng", "mp4", "mkv", "mov", "avi", "webm", "flv", "wmv", "3gp", "m4v", "ts")
+        val targetDest = if (isMedia) "/sdcard/Pictures/" else "/sdcard/Download/"
+
+        Toast.makeText(this, "🚀 Starting SSH transfer for ${item.name}...", Toast.LENGTH_SHORT).show()
 
         val jsonPayload = JSONObject().apply {
             put("path", item.path)
             put("name", item.name)
             put("size", item.sizeStr)
             put("phone_ip", phoneIp)
-            put("dest", "/sdcard/Download/")
+            put("dest", targetDest)
         }.toString()
 
         val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -1027,20 +1031,22 @@ class MainActivity : AppCompatActivity() {
         client.newCall(req).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 runOnUiThread {
-                    Toast.makeText(this@MainActivity, "⚠️ تعذر إرسال SSH، جاري محاولة التحميل المباشر...", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "⚠️ SSH transfer failed, falling back to direct download...", Toast.LENGTH_SHORT).show()
                     downloadFileHttpFallback(item)
                 }
             }
 
             override fun onResponse(call: Call, response: Response) {
                 val body = response.body?.string() ?: ""
-                var message = "🚀 بدأ إرسال ${item.name} عبر SSH إلى هاتفك في الخلفية!"
+                var message = "🚀 Starting SSH transfer for ${item.name} to phone in background!"
                 var isSuccess = response.isSuccessful
+                var resolvedDest = targetDest
                 try {
                     val json = JSONObject(body)
                     if (json.optString("status") == "success") {
                         isSuccess = true
                         message = json.optString("message", message)
+                        resolvedDest = json.optString("dest", targetDest)
                     } else {
                         isSuccess = false
                     }
@@ -1048,16 +1054,16 @@ class MainActivity : AppCompatActivity() {
 
                 runOnUiThread {
                     if (isSuccess) {
-                        Toast.makeText(this@MainActivity, "🚀 بدأ النقل عبر SSH إلى /sdcard/Download!", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@MainActivity, "🚀 SSH transfer started to $resolvedDest!", Toast.LENGTH_LONG).show()
                         addPcMessage(
-                            "🚀 بدأ إرسال الملف عبر SSH إلى الهاتف!\n" +
-                            "📁 اسم الملف: ${item.name}\n" +
-                            "💾 الحجم: ${item.sizeStr}\n" +
-                            "📍 المجلد: /sdcard/Download/\n" +
-                            "🛡️ النقل يتم عبر SSH في الخلفية؛ يمكنك إغلاق التطبيق أو قفل الشاشة بأمان تام دون انقطاع التحميل."
+                            "🚀 File transfer started via SSH in background!\n" +
+                            "📁 File: ${item.name}\n" +
+                            "💾 Size: ${item.sizeStr}\n" +
+                            "📍 Destination: $resolvedDest\n" +
+                            "🛡️ Transferred via SSH in background; you can safely close the app or lock your screen without interruption."
                         )
                     } else {
-                        Toast.makeText(this@MainActivity, "⚠️ تعذر الإرسال عبر SSH، جاري التحميل المباشر...", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "⚠️ SSH transfer failed, falling back to direct download...", Toast.LENGTH_SHORT).show()
                         downloadFileHttpFallback(item)
                     }
                 }
@@ -1069,28 +1075,34 @@ class MainActivity : AppCompatActivity() {
         val baseUrl = getBaseUrl()
         val encoded = URLEncoder.encode(item.path, "UTF-8")
         val url = "$baseUrl/api/download?path=$encoded"
+        val ext = item.name.substringAfterLast('.', "").lowercase()
+        val isMedia = ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "svg", "raw", "dng", "mp4", "mkv", "mov", "avi", "webm", "flv", "wmv", "3gp", "m4v", "ts")
 
         val req = Request.Builder().url(url).build()
         client.newCall(req).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 runOnUiThread {
-                    Toast.makeText(this@MainActivity, "❌ فشل سحب الملف: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, "❌ Failed to download file: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
 
             override fun onResponse(call: Call, response: Response) {
                 if (response.isSuccessful) {
                     try {
-                        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                        if (!downloadsDir.exists()) downloadsDir.mkdirs()
+                        val targetDir = if (isMedia) {
+                            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+                        } else {
+                            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                        }
+                        if (!targetDir.exists()) targetDir.mkdirs()
 
-                        var targetFile = File(downloadsDir, item.name)
+                        var targetFile = File(targetDir, item.name)
                         var counter = 1
                         val nameWithoutExt = targetFile.nameWithoutExtension
-                        val ext = targetFile.extension
+                        val fileExt = targetFile.extension
                         while (targetFile.exists()) {
-                            val newName = if (ext.isNotEmpty()) "$nameWithoutExt ($counter).$ext" else "$nameWithoutExt ($counter)"
-                            targetFile = File(downloadsDir, newName)
+                            val newName = if (fileExt.isNotEmpty()) "$nameWithoutExt ($counter).$fileExt" else "$nameWithoutExt ($counter)"
+                            targetFile = File(targetDir, newName)
                             counter++
                         }
 
@@ -1100,13 +1112,14 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
 
+                        val folderLabel = if (isMedia) "Pictures" else "Download"
                         runOnUiThread {
-                            Toast.makeText(this@MainActivity, "✅ تم حفظ ${targetFile.name} في مجلد Download بنجاح!", Toast.LENGTH_LONG).show()
+                            Toast.makeText(this@MainActivity, "✅ Saved ${targetFile.name} to $folderLabel folder!", Toast.LENGTH_LONG).show()
                             addPcMessage(
-                                "📥 تم سحب الملف من الحاسوب بنجاح!\n" +
-                                "📁 اسم الملف: ${targetFile.name}\n" +
-                                "💾 الحجم: ${item.sizeStr}\n" +
-                                "📍 تم الحفظ في: Download/${targetFile.name}"
+                                "📥 File downloaded from PC successfully!\n" +
+                                "📁 File: ${targetFile.name}\n" +
+                                "💾 Size: ${item.sizeStr}\n" +
+                                "📍 Saved to: $folderLabel/${targetFile.name}"
                             )
                         }
                         return
@@ -1115,7 +1128,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 runOnUiThread {
-                    Toast.makeText(this@MainActivity, "❌ فشل حفظ الملف", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "❌ Failed to save file", Toast.LENGTH_SHORT).show()
                 }
             }
         })
@@ -1281,21 +1294,21 @@ class MainActivity : AppCompatActivity() {
         etPort.setText(prefs.getString("pc_port", "5050"))
 
         btnAutoDiscover?.setOnClickListener {
-            tvAutoDiscoverText?.text = "⏳ جاري البحث في الشبكة..."
+            tvAutoDiscoverText?.text = "⏳ Searching network..."
             discoverPcServer(
                 onSuccess = { foundIp ->
                     etIp.setText(foundIp)
-                    tvAutoDiscoverText?.text = "✅ تم العثور على الحاسوب: $foundIp"
+                    tvAutoDiscoverText?.text = "✅ Found PC: $foundIp"
                 },
                 onFailed = {
-                    tvAutoDiscoverText?.text = "❌ لم يتم العثور على الحاسوب، تأكد من تشغيل السيرفر"
+                    tvAutoDiscoverText?.text = "❌ PC not found. Ensure server is running."
                 }
             )
         }
 
         AlertDialog.Builder(this)
             .setView(view)
-            .setPositiveButton("حفظ") { _, _ ->
+            .setPositiveButton("Save") { _, _ ->
                 val newIp = etIp.text.toString().trim()
                 val newPort = etPort.text.toString().trim()
                 if (newIp.isNotEmpty()) {
@@ -1303,11 +1316,11 @@ class MainActivity : AppCompatActivity() {
                         .putString("pc_ip", newIp)
                         .putString("pc_port", if (newPort.isNotEmpty()) newPort else "5050")
                         .apply()
-                    Toast.makeText(this, "تم حفظ الإعدادات", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Settings saved", Toast.LENGTH_SHORT).show()
                     checkConnection()
                 }
             }
-            .setNegativeButton("إلغاء", null)
+            .setNegativeButton("Cancel", null)
             .show()
     }
 }

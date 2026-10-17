@@ -1,6 +1,9 @@
 @echo off
-title PC Remote Control Server
 cd /d "%~dp0"
-echo Starting PC Remote Control Server...
+title PC Controller - Debug Console Mode
+echo ========================================================
+echo Starting PC Controller in visible debug console mode...
+echo (Close this window or press Ctrl+C to stop)
+echo ========================================================
 python server.py
 pause

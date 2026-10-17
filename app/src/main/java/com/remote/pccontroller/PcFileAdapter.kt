@@ -24,7 +24,7 @@ class PcFileAdapter(
 
         if (item.isDirectory) {
             holder.tvFileIcon.text = "📁"
-            holder.tvFileDetails.text = "مجلد"
+            holder.tvFileDetails.text = "Folder"
             holder.btnDownload.visibility = View.GONE
         } else {
             holder.tvFileIcon.text = getFileIcon(item.ext)

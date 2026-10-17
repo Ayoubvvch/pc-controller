@@ -16,7 +16,7 @@ import socket
 import urllib.parse
 import re
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Ensure safe stdout/stderr on Windows (especially when run via pythonw.exe)
 log_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "server.log")
@@ -187,33 +187,250 @@ def kill_mpv():
         pass
 
 def parse_duration_seconds(duration_str, default_sec=15 * 60):
-    """Parses durations like '15min', '15m', '1h', '30s', '45' into seconds."""
+    """Parses durations like '15min', '15m', '1h', '30s', '45', 'بعد 15 دقيقة', 'in 30m' into seconds."""
     import re
     s = duration_str.strip().lower()
+    for prefix in ["after", "in", "بعد", "خلال", "في"]:
+        if s.startswith(prefix + " "):
+            s = s[len(prefix):].strip()
+            
     if not s:
         return default_sec
-    m = re.match(r"^([\d\.]+)\s*(h|hr|hours?|m|min|minutes?|s|sec|seconds?|دقيقة|ساعة|ثانية)?$", s)
+        
+    if s in ["ساعة", "ساعه", "1 ساعة", "hour", "1 hour", "1h"]:
+        return 3600
+    if s in ["ساعتين", "ساعتان", "2 hours", "2h"]:
+        return 7200
+    if s in ["نصف ساعة", "نص ساعة", "نصف ساعه", "نص ساعه", "half hour", "30min", "30m"]:
+        return 1800
+    if s in ["ثلث ساعة", "ثلث ساعه", "20min", "20m"]:
+        return 1200
+    if s in ["ربع ساعة", "ربع ساعه", "15min", "15m"]:
+        return 900
+
+    m = re.match(r"^([\d\.]+)\s*(h|hr|hours?|m|min|minutes?|s|sec|seconds?|دقيقة|دقائق|ساعة|ساعات|ثانية|ثواني)?$", s)
     if m:
         val = float(m.group(1))
         unit = (m.group(2) or "m").lower()
-        if unit in ["h", "hr", "hour", "hours", "ساعة"]:
+        if unit in ["h", "hr", "hour", "hours", "ساعة", "ساعات"]:
             return int(val * 3600)
-        elif unit in ["s", "sec", "second", "seconds", "ثانية"]:
+        elif unit in ["s", "sec", "second", "seconds", "ثانية", "ثواني"]:
             return int(val)
         else:
             return int(val * 60)
     return default_sec
 
 def format_duration(seconds):
-    """Formats seconds into readable string."""
+    """Formats seconds into readable English string."""
     if seconds >= 3600:
         hrs = seconds / 3600
-        return f"{hrs:.1f} ساعة" if hrs % 1 != 0 else f"{int(hrs)} ساعة"
+        return f"{hrs:.1f} hours" if hrs % 1 != 0 else (f"1 hour" if int(hrs) == 1 else f"{int(hrs)} hours")
     elif seconds >= 60:
         mins = seconds // 60
-        return f"{mins} دقيقة"
+        rem_sec = seconds % 60
+        if rem_sec > 0:
+            return f"{mins} min {rem_sec} sec"
+        return f"{mins} minutes" if mins > 1 else "1 minute"
     else:
-        return f"{seconds} ثانية"
+        return f"{seconds} seconds"
+
+# ---------------- Absolute Persistent Power Scheduler ----------------
+POWER_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "power_timer.json")
+active_power_thread = None
+active_power_cancel_event = threading.Event()
+
+def execute_system_power(action):
+    """Executes forced, absolute system power action (sleep, hibernate, shutdown, restart)."""
+    global active_sleep_details
+    kill_mpv()
+    print(f"[POWER] Executing forced power action: {action}")
+    
+    # 1. Unconditionally stop active media / audio streams so Windows won't block sleep
+    try:
+        user32.keybd_event(0xB3, 0, 0, 0) # VK_MEDIA_PLAY_PAUSE down
+        user32.keybd_event(0xB3, 0, 2, 0) # VK_MEDIA_PLAY_PAUSE up
+    except Exception:
+        pass
+
+    # Cancel secondary scheduled task if one existed
+    try:
+        subprocess.run(['schtasks', '/Delete', '/TN', 'PCRemote_OneShotPower', '/F'],
+                       capture_output=True,
+                       creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+    except Exception:
+        pass
+
+    # 2. Execute power command with FORCE flags
+    if action == "shutdown":
+        subprocess.run(["shutdown", "/s", "/f", "/t", "0", "/c", "PC Remote Absolute Shutdown"],
+                       creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+    elif action == "restart":
+        subprocess.run(["shutdown", "/r", "/f", "/t", "0", "/c", "PC Remote Absolute Restart"],
+                       creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+    elif action == "hibernate":
+        subprocess.run(["shutdown", "/h"],
+                       creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+    elif action == "sleep":
+        # First try ctypes SetSuspendState(0, 1, 0) -> Suspend=0, Force=1, DisableWake=0
+        try:
+            ctypes.windll.powrprof.SetSuspendState(0, 1, 0)
+        except Exception:
+            pass
+        # Backup: PowerShell forced suspend
+        ps_cmd = (
+            "Add-Type -AssemblyName System.Windows.Forms; "
+            "[System.Windows.Forms.Application]::SetSuspendState([System.Windows.Forms.PowerState]::Suspend, $true, $false)"
+        )
+        subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd],
+                       creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+
+    # 3. Clean up persistent timer file
+    if os.path.exists(POWER_STATE_FILE):
+        try:
+            os.remove(POWER_STATE_FILE)
+        except Exception:
+            pass
+    active_sleep_details = None
+
+def schedule_power_timer(action, seconds, human_text):
+    """Schedules an absolute, persistent power timer with OS-level redundancy."""
+    global active_power_thread, active_power_cancel_event, active_sleep_details
+    
+    # Cancel previous timers
+    cancel_power_timer()
+    
+    target_epoch = time.time() + seconds
+    active_power_cancel_event.clear()
+    
+    state = {
+        "action": action,
+        "seconds": seconds,
+        "target_epoch": target_epoch,
+        "human_text": human_text,
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    try:
+        with open(POWER_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[POWER] Error saving power state: {e}")
+
+    active_sleep_details = state
+
+    # OS-level kernel backup for shutdown & restart
+    if action == "shutdown":
+        subprocess.run(["shutdown", "/s", "/f", "/t", str(seconds), "/c", f"Scheduled Shutdown in {human_text}"],
+                       creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+    elif action == "restart":
+        subprocess.run(["shutdown", "/r", "/f", "/t", str(seconds), "/c", f"Scheduled Restart in {human_text}"],
+                       creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+    elif action in ["sleep", "hibernate"]:
+        # Schedule one-shot Windows Task Scheduler as secondary OS backup
+        try:
+            target_dt = datetime.now() + timedelta(seconds=seconds)
+            st_time = target_dt.strftime("%H:%M:%S")
+            sd_date = target_dt.strftime("%d/%m/%Y")
+            if action == "sleep":
+                tr_cmd = 'powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState([System.Windows.Forms.PowerState]::Suspend, $true, $false)"'
+            else:
+                tr_cmd = 'shutdown /h'
+            subprocess.run(
+                ['schtasks', '/Create', '/TN', 'PCRemote_OneShotPower', '/TR', tr_cmd, '/SC', 'ONCE', '/ST', st_time, '/SD', sd_date, '/F'],
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
+                capture_output=True
+            )
+        except Exception:
+            pass
+
+    # Background Python thread countdown
+    def countdown_worker():
+        while not active_power_cancel_event.is_set():
+            remaining = target_epoch - time.time()
+            if remaining <= 0:
+                execute_system_power(action)
+                break
+            time.sleep(min(remaining, 1.0))
+
+    active_power_thread = threading.Thread(target=countdown_worker, daemon=True, name=f"Power-{action}")
+    active_power_thread.start()
+    print(f"[POWER] Scheduled {action} in {human_text} ({seconds}s). Target: {datetime.fromtimestamp(target_epoch).strftime('%H:%M:%S')}")
+
+def cancel_power_timer():
+    """Cancels any scheduled power timer across OS kernel, Task Scheduler, and Python."""
+    global active_power_cancel_event, active_sleep_details
+    active_power_cancel_event.set()
+    
+    # Cancel Windows shutdown/restart if scheduled
+    try:
+        subprocess.run(["shutdown", "/a"], capture_output=True,
+                       creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+    except Exception:
+        pass
+
+    # Cancel one-shot scheduled task if scheduled
+    try:
+        subprocess.run(['schtasks', '/Delete', '/TN', 'PCRemote_OneShotPower', '/F'], capture_output=True,
+                       creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+    except Exception:
+        pass
+
+    # Remove persistent state file
+    if os.path.exists(POWER_STATE_FILE):
+        try:
+            os.remove(POWER_STATE_FILE)
+        except Exception:
+            pass
+
+    had_timer = active_sleep_details is not None
+    active_sleep_details = None
+    kill_mpv()
+    return had_timer
+
+def get_active_power_status():
+    """Returns active timer info if one is currently scheduled."""
+    global active_sleep_details
+    if os.path.exists(POWER_STATE_FILE):
+        try:
+            with open(POWER_STATE_FILE, "r", encoding="utf-8") as f:
+                state = json.load(f)
+            remaining = int(state.get("target_epoch", 0) - time.time())
+            if remaining > 0:
+                state["remaining_seconds"] = remaining
+                state["remaining_human"] = format_duration(remaining)
+                active_sleep_details = state
+                return state
+        except Exception:
+            pass
+    return None
+
+def init_power_scheduler():
+    """Restores any active power timer saved on disk on server startup."""
+    global active_power_thread, active_power_cancel_event, active_sleep_details
+    if os.path.exists(POWER_STATE_FILE):
+        try:
+            with open(POWER_STATE_FILE, "r", encoding="utf-8") as f:
+                state = json.load(f)
+            target_epoch = state.get("target_epoch", 0)
+            action = state.get("action", "sleep")
+            remaining = target_epoch - time.time()
+            if remaining > 0:
+                print(f"[POWER] 🔄 Resuming active {action} timer! {int(remaining)}s ({format_duration(int(remaining))}) remaining...")
+                active_sleep_details = state
+                active_power_cancel_event.clear()
+                def resume_worker():
+                    while not active_power_cancel_event.is_set():
+                        rem = target_epoch - time.time()
+                        if rem <= 0:
+                            execute_system_power(action)
+                            break
+                        time.sleep(min(rem, 1.0))
+                active_power_thread = threading.Thread(target=resume_worker, daemon=True, name="PowerResume")
+                active_power_thread.start()
+            else:
+                print(f"[POWER] ⚠️ Found expired {action} timer from disk! Executing now...")
+                execute_system_power(action)
+        except Exception as e:
+            print(f"[POWER] Error restoring power scheduler: {e}")
 
 # Volume Control via vol.exe (Windows CoreAudio API)
 VOL_EXE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vol.exe")
@@ -282,7 +499,7 @@ def take_screenshot(screen_target="all"):
         if not os.path.exists(SCREENSHOT_EXE):
             return {
                 "status": "error",
-                "message": "❌ أداة التقاط الشاشة (screenshot.exe) غير متوفرة."
+                "message": "❌ Screenshot utility (screenshot.exe) not found."
             }
 
         res = subprocess.run([SCREENSHOT_EXE, filepath, screen_target], capture_output=True, text=True,
@@ -303,24 +520,24 @@ def take_screenshot(screen_target="all"):
                 pass
 
             file_size = os.path.getsize(filepath)
-            screen_desc = "الشاشتين معاً (كامل سطح المكتب)" if screen_target == "all" else f"الشاشة رقم {screen_target}"
+            screen_desc = "All Displays" if screen_target == "all" else f"Display {screen_target}"
             return {
                 "status": "success",
                 "type": "image",
                 "image_url": f"/screenshot/{filename}",
                 "filename": filename,
-                "message": f"📸 تم التقاط لقطة لـ {screen_desc} بنجاح! ({format_size(file_size)})"
+                "message": f"📸 Screenshot captured successfully from {screen_desc}! ({format_size(file_size)})"
             }
         else:
-            err_msg = res.stderr.strip() or res.stdout.strip() or "فشل غير معروف"
+            err_msg = res.stderr.strip() or res.stdout.strip() or "Unknown failure"
             return {
                 "status": "error",
-                "message": f"❌ تعذر التقاط الشاشة: {err_msg}"
+                "message": f"❌ Could not capture screenshot: {err_msg}"
             }
     except Exception as e:
         return {
             "status": "error",
-            "message": f"❌ خطأ أثناء التقاط الشاشة: {str(e)}"
+            "message": f"❌ Error during screen capture: {str(e)}"
         }
 
 def browse_path(target_path=None):
@@ -394,7 +611,7 @@ def browse_path(target_path=None):
     except (PermissionError, OSError) as e:
         return {
             "status": "error",
-            "message": f"تعذر فتح المجلد: {str(e)}",
+            "message": f"Could not open directory: {str(e)}",
             "current_path": target_path,
             "parent_path": parent,
             "drives": drives,
@@ -437,48 +654,37 @@ def execute_action(action_type, param=None):
             pending_confirmation = None
             
             if action_to_do == "sleep":
-                def do_sleep():
-                    ps_cmd = (
-                        "Add-Type -AssemblyName System.Windows.Forms; "
-                        "[System.Windows.Forms.Application]::SetSuspendState([System.Windows.Forms.PowerState]::Suspend, $false, $false)"
-                    )
-                    subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd],
-                                   creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-                run_delayed(do_sleep, 1.2)
+                run_delayed(lambda: execute_system_power("sleep"), 1.2)
                 return {
                     "status": "success",
-                    "message": "💤 تم تأكيد الأمر! جاري إدخال الحاسوب في وضع السكون (Sleep)... تصبح على خير!"
+                    "message": "💤 Confirmed! Entering Sleep mode... Goodnight!"
                 }
 
             elif action_to_do == "shutdown":
-                subprocess.run(["shutdown", "/s", "/t", "5", "/c", "Shutdown confirmed from Phone"], 
-                               creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+                run_delayed(lambda: execute_system_power("shutdown"), 1.2)
                 return {
                     "status": "warning",
-                    "message": "🛑 تم تأكيد الأمر! سيتم إيقاف تشغيل الحاسوب بالكامل خلال 5 ثوانٍ."
+                    "message": "🛑 Confirmed! Shutting down the PC immediately."
                 }
 
             elif action_to_do == "restart":
-                subprocess.run(["shutdown", "/r", "/t", "5", "/c", "Restart confirmed from Phone"],
-                               creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+                run_delayed(lambda: execute_system_power("restart"), 1.2)
                 return {
                     "status": "warning",
-                    "message": "🔄 تم تأكيد الأمر! سيتم إعادة تشغيل الحاسوب خلال 5 ثوانٍ."
+                    "message": "🔄 Confirmed! Restarting the PC immediately."
                 }
 
             elif action_to_do == "hibernate":
-                def do_hibernate():
-                    subprocess.run(["shutdown", "/h"], creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-                run_delayed(do_hibernate, 1.2)
+                run_delayed(lambda: execute_system_power("hibernate"), 1.2)
                 return {
                     "status": "success",
-                    "message": "⚡ تم تأكيد الأمر! جاري إدخال الحاسوب في وضع الإسبات (Hibernate)..."
+                    "message": "⚡ Confirmed! Entering Hibernate mode..."
                 }
         else:
             pending_confirmation = None
             return {
                 "status": "info",
-                "message": "ℹ️ لا يوجد أمر معلق بانتظار التأكيد حالياً (أو انتهت صلاحية التأكيد 60 ثانية)."
+                "message": "ℹ️ No pending action awaiting confirmation (or the 60-second window expired)."
             }
 
     elif cmd in ["no", "n", "لا", "رفض"]:
@@ -487,52 +693,111 @@ def execute_action(action_type, param=None):
             pending_confirmation = None
             return {
                 "status": "success",
-                "message": f"✅ تم إلغاء تنفيذ أمر ({action_name}) بنجاح! حاسوبك بأمان."
+                "message": f"✅ Cancelled '{action_name}' action successfully. Your PC is safe."
             }
         else:
             return {
                 "status": "info",
-                "message": "ℹ️ لا يوجد أمر معلق لإلغائه."
+                "message": "ℹ️ No pending action to cancel."
             }
 
-    # Scheduled Sleep without Rain (e.g. sleep 15, sleep 30, sleep 15m, sleep 1h)
-    elif ((cmd.startswith("sleep ") or cmd.startswith("نوم ") or cmd.startswith("سكون "))
-          and not cmd.startswith("sleep rain")):
-        dur_part = cmd.replace("sleep", "").replace("نوم", "").replace("سكون", "").strip()
+    # ------------------ Timed Power Commands Detection ------------------
+    is_timed_sleep = (
+        (cmd.startswith("sleep ") or cmd.startswith("نوم ") or cmd.startswith("سكون ") or cmd.startswith("slp "))
+        and not (cmd.startswith("sleep rain") or cmd.startswith("sleeprain"))
+    )
+    is_timed_shutdown = (
+        cmd.startswith("shutdown ") or cmd.startswith("طفي ") or cmd.startswith("إطفاء ") or
+        cmd.startswith("إيقاف ") or cmd.startswith("sd ") or cmd.startswith("poweroff ")
+    )
+    is_timed_hibernate = (
+        cmd.startswith("hibernate ") or cmd.startswith("سبات ") or cmd.startswith("hib ")
+    )
+    is_timed_restart = (
+        cmd.startswith("restart ") or cmd.startswith("reboot ") or cmd.startswith("إعادة تشغيل ")
+    )
+
+    if is_timed_sleep:
+        dur_part = cmd
+        for p in ["sleep", "نوم", "سكون", "slp"]:
+            if dur_part.startswith(p + " "):
+                dur_part = dur_part[len(p) + 1:].strip()
+                break
         sec = parse_duration_seconds(dur_part, default_sec=15 * 60)
         dur_human = format_duration(sec)
-
-        # Cancel any previous sleep timer
-        if active_sleep_timer:
-            try:
-                active_sleep_timer.cancel()
-            except Exception:
-                pass
-            active_sleep_timer = None
-
-        def on_timed_sleep():
-            global active_sleep_timer, active_sleep_details
-            kill_mpv()
-            ps_cmd = (
-                "Add-Type -AssemblyName System.Windows.Forms; "
-                "[System.Windows.Forms.Application]::SetSuspendState([System.Windows.Forms.PowerState]::Suspend, $false, $false)"
-            )
-            subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd],
-                           creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-            active_sleep_timer = None
-            active_sleep_details = None
-
-        active_sleep_timer = threading.Timer(sec, on_timed_sleep)
-        active_sleep_timer.daemon = True
-        active_sleep_timer.start()
-        active_sleep_details = {"name": "Scheduled Sleep", "seconds": sec, "text": dur_human, "start": time.time()}
-
+        target_str = (datetime.now() + timedelta(seconds=sec)).strftime("%I:%M %p")
+        schedule_power_timer("sleep", sec, dur_human)
         return {
             "status": "success",
             "message": (
-                f"💤 تم جدولة وضع السكون (Sleep) بنجاح!\n\n"
-                f"⏱️ سينام الحاسوب تلقائياً بعد: {dur_human}.\n"
-                f"💡 أرسل 'cancel' لإلغاء الموقت في أي وقت."
+                f"💤 Sleep scheduled successfully!\n\n"
+                f"⏱️ PC will enter sleep mode in: {dur_human}.\n"
+                f"🕒 Target time: {target_str}\n"
+                f"🛡️ Persistent scheduler: active even if screen locks or server restarts.\n"
+                f"💡 Send 'cancel' or 'stop' to abort anytime."
+            )
+        }
+
+    elif is_timed_shutdown:
+        dur_part = cmd
+        for p in ["shutdown", "طفي", "إطفاء", "إيقاف", "sd", "poweroff"]:
+            if dur_part.startswith(p + " "):
+                dur_part = dur_part[len(p) + 1:].strip()
+                break
+        sec = parse_duration_seconds(dur_part, default_sec=15 * 60)
+        dur_human = format_duration(sec)
+        target_str = (datetime.now() + timedelta(seconds=sec)).strftime("%I:%M %p")
+        schedule_power_timer("shutdown", sec, dur_human)
+        return {
+            "status": "success",
+            "message": (
+                f"🛑 Shutdown scheduled successfully!\n\n"
+                f"⏱️ PC will shut down in: {dur_human}.\n"
+                f"🕒 Target time: {target_str}\n"
+                f"🛡️ Registered in Windows kernel and persistent scheduler.\n"
+                f"💡 Send 'cancel' or 'stop' to abort anytime."
+            )
+        }
+
+    elif is_timed_hibernate:
+        dur_part = cmd
+        for p in ["hibernate", "سبات", "hib"]:
+            if dur_part.startswith(p + " "):
+                dur_part = dur_part[len(p) + 1:].strip()
+                break
+        sec = parse_duration_seconds(dur_part, default_sec=15 * 60)
+        dur_human = format_duration(sec)
+        target_str = (datetime.now() + timedelta(seconds=sec)).strftime("%I:%M %p")
+        schedule_power_timer("hibernate", sec, dur_human)
+        return {
+            "status": "success",
+            "message": (
+                f"⚡ Hibernate scheduled successfully!\n\n"
+                f"⏱️ PC will hibernate in: {dur_human}.\n"
+                f"🕒 Target time: {target_str}\n"
+                f"🛡️ Registered in Task Scheduler and persistent scheduler.\n"
+                f"💡 Send 'cancel' or 'stop' to abort anytime."
+            )
+        }
+
+    elif is_timed_restart:
+        dur_part = cmd
+        for p in ["restart", "reboot", "إعادة تشغيل"]:
+            if dur_part.startswith(p + " "):
+                dur_part = dur_part[len(p) + 1:].strip()
+                break
+        sec = parse_duration_seconds(dur_part, default_sec=15 * 60)
+        dur_human = format_duration(sec)
+        target_str = (datetime.now() + timedelta(seconds=sec)).strftime("%I:%M %p")
+        schedule_power_timer("restart", sec, dur_human)
+        return {
+            "status": "success",
+            "message": (
+                f"🔄 Restart scheduled successfully!\n\n"
+                f"⏱️ PC will restart in: {dur_human}.\n"
+                f"🕒 Target time: {target_str}\n"
+                f"🛡️ Registered in Windows kernel and persistent scheduler.\n"
+                f"💡 Send 'cancel' or 'stop' to abort anytime."
             )
         }
 
@@ -542,10 +807,10 @@ def execute_action(action_type, param=None):
         return {
             "status": "warning",
             "message": (
-                "⚠️ تأكيد أمان:\nهل تريد إدخال الحاسوب في وضع السكون (Sleep) الآن؟\n\n"
-                "👉 أرسل **yes** أو **نعم** للتأكيد.\n"
-                "👉 أرسل **no** أو **لا** للإلغاء.\n"
-                "⏳ مهلة التأكيد: 60 ثانية."
+                "⚠️ Safety Confirmation:\nAre you sure you want to put the PC to Sleep now?\n\n"
+                "👉 Send **yes** to confirm.\n"
+                "👉 Send **no** to cancel.\n"
+                "⏳ Timeout: 60 seconds."
             )
         }
 
@@ -554,10 +819,10 @@ def execute_action(action_type, param=None):
         return {
             "status": "warning",
             "message": (
-                "⚠️ تأكيد أمان:\nهل أنت متأكد من رغبتك في إيقاف تشغيل الحاسوب (Shutdown) بالكامل؟\n\n"
-                "👉 أرسل **yes** أو **نعم** للتأكيد.\n"
-                "👉 أرسل **no** أو **لا** للإلغاء.\n"
-                "⏳ مهلة التأكيد: 60 ثانية."
+                "⚠️ Safety Confirmation:\nAre you sure you want to shut down the PC completely?\n\n"
+                "👉 Send **yes** to confirm.\n"
+                "👉 Send **no** to cancel.\n"
+                "⏳ Timeout: 60 seconds."
             )
         }
 
@@ -566,10 +831,10 @@ def execute_action(action_type, param=None):
         return {
             "status": "warning",
             "message": (
-                "⚠️ تأكيد أمان:\nهل تريد بالتأكيد إعادة تشغيل الحاسوب (Restart)؟\n\n"
-                "👉 أرسل **yes** أو **نعم** للتأكيد.\n"
-                "👉 أرسل **no** أو **لا** للإلغاء.\n"
-                "⏳ مهلة التأكيد: 60 ثانية."
+                "⚠️ Safety Confirmation:\nAre you sure you want to restart the PC?\n\n"
+                "👉 Send **yes** to confirm.\n"
+                "👉 Send **no** to cancel.\n"
+                "⏳ Timeout: 60 seconds."
             )
         }
 
@@ -578,24 +843,16 @@ def execute_action(action_type, param=None):
         return {
             "status": "warning",
             "message": (
-                "⚠️ تأكيد أمان:\nهل تريد إدخال الحاسوب في وضع الإسبات (Hibernate) الآن؟\n\n"
-                "👉 أرسل **yes** أو **نعم** للتأكيد.\n"
-                "👉 أرسل **no** أو **لا** للإلغاء.\n"
-                "⏳ مهلة التأكيد: 60 ثانية."
+                "⚠️ Safety Confirmation:\nAre you sure you want to put the PC into Hibernate mode now?\n\n"
+                "👉 Send **yes** to confirm.\n"
+                "👉 Send **no** to cancel.\n"
+                "⏳ Timeout: 60 seconds."
             )
         }
 
     elif (cmd.startswith("sleep rain") or cmd == "sleep rain" or 
           cmd.startswith("rain") or cmd.startswith("sr ") or cmd == "sr" or
           cmd.startswith("srm ") or cmd == "srm"):
-        # Cancel any previous sleep timer
-        if active_sleep_timer:
-            try:
-                active_sleep_timer.cancel()
-            except Exception:
-                pass
-            active_sleep_timer = None
-
         # Check if minimized desktop mode is requested
         is_minimized = (
             "minimized" in cmd or 
@@ -624,7 +881,7 @@ def execute_action(action_type, param=None):
         if not os.path.exists(RAIN_VIDEO):
             return {
                 "status": "error",
-                "message": f"❌ لم يتم العثور على ملف الفيديو: {RAIN_VIDEO}"
+                "message": f"❌ Video file not found: {RAIN_VIDEO}"
             }
 
         mpv_exec = MPV_PATH if os.path.exists(MPV_PATH) else "mpv"
@@ -644,38 +901,23 @@ def execute_action(action_type, param=None):
                 subprocess.run(["powershell", "-NoProfile", "-Command", "(New-Object -ComObject Shell.Application).MinimizeAll()"],
                                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
             threading.Thread(target=sweep_minimize, daemon=True).start()
-            mode_desc = "مع تصغير كافة النوافذ (Desktop فقط)"
+            mode_desc = "with all windows minimized (Desktop only)"
         else:
             # Standard fullscreen mode
             subprocess.Popen([mpv_exec, "--fs", "--loop-file=inf", RAIN_VIDEO],
                              creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-            mode_desc = "في وضع ملء الشاشة (Fullscreen + Loop)"
+            mode_desc = "in fullscreen looping mode"
 
-        # Setup sleep timer callback
-        def on_rain_timer_done():
-            global active_sleep_timer, active_sleep_details
-            kill_mpv()
-            ps_cmd = (
-                "Add-Type -AssemblyName System.Windows.Forms; "
-                "[System.Windows.Forms.Application]::SetSuspendState([System.Windows.Forms.PowerState]::Suspend, $false, $false)"
-            )
-            subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd],
-                           creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-            active_sleep_timer = None
-            active_sleep_details = None
-
-        active_sleep_timer = threading.Timer(sec, on_rain_timer_done)
-        active_sleep_timer.daemon = True
-        active_sleep_timer.start()
-        active_sleep_details = {"name": "Rain Sleep", "seconds": sec, "text": dur_human, "start": time.time(), "minimized": is_minimized}
+        # Absolute persistent schedule for sleep
+        schedule_power_timer("sleep", sec, dur_human)
 
         return {
             "status": "success",
             "message": (
-                f"🌧️ تم تشغيل Rain.mp4 بصوت 28% {mode_desc}!\n\n"
-                f"⏱️ المدة المحددة: {dur_human}\n"
-                f"💤 سينام الحاسوب تلقائياً بعد انتهاء الوقت.\n"
-                f"💡 أرسل 'cancel' أو 'stop' لإلغاء الموقت وإغلاق الفيديو في أي وقت."
+                f"🌧️ Playing Rain.mp4 at 28% volume {mode_desc}!\n\n"
+                f"⏱️ Duration: {dur_human}\n"
+                f"💤 PC will enter Sleep mode when the timer completes.\n"
+                f"💡 Send 'cancel' or 'stop' to abort anytime."
             )
         }
 
@@ -688,7 +930,7 @@ def execute_action(action_type, param=None):
         if not os.path.exists(MESSI_VIDEO):
             return {
                 "status": "error",
-                "message": f"❌ لم يتم العثور على ملف الفيديو: {MESSI_VIDEO}"
+                "message": f"❌ Video file not found: {MESSI_VIDEO}"
             }
 
         mpv_exec = MPV_PATH if os.path.exists(MPV_PATH) else "mpv"
@@ -696,36 +938,21 @@ def execute_action(action_type, param=None):
                          creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         return {
             "status": "success",
-            "message": "🐐⚽ تم تشغيل Messi.mp4 في وضع ملء الشاشة والتكرار المستمر بصوت 16%! 🔥\n💡 أرسل 'stop' لإغلاق الفيديو."
+            "message": "🐐⚽ Playing Messi.mp4 in looping fullscreen mode at 16% volume! 🔥\n💡 Send 'stop' to close video."
         }
 
     elif cmd in ["cancel", "abort", "إلغاء", "stop", "إيقاف", "close"]:
-        had_timer = False
-        if active_sleep_timer:
-            try:
-                active_sleep_timer.cancel()
-            except Exception:
-                pass
-            active_sleep_timer = None
-            active_sleep_details = None
-            had_timer = True
-
-        # Stop mpv player
+        had_timer = cancel_power_timer()
         kill_mpv()
-
-        # Cancel Windows shutdown if scheduled
-        res = subprocess.run(["shutdown", "/a"], capture_output=True, text=True,
-                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-
-        if had_timer or res.returncode == 0:
+        if had_timer:
             return {
                 "status": "success",
-                "message": "✅ تم إيقاف المشغل (mpv) وإلغاء موقت السكون المجدول بنجاح!"
+                "message": "✅ Media player stopped and scheduled power timer cancelled successfully!"
             }
         else:
             return {
                 "status": "success",
-                "message": "✅ تم إغلاق المشغل والتأكد من عدم وجود أي موقت مجدول."
+                "message": "✅ Media player closed and verified no scheduled timers."
             }
 
     elif cmd in ["lock", "قفل"]:
@@ -735,7 +962,7 @@ def execute_action(action_type, param=None):
         run_delayed(do_lock, 0.5)
         return {
             "status": "success",
-            "message": "🔒 تم قفل شاشة الحاسوب بنجاح."
+            "message": "🔒 PC screen locked successfully."
         }
 
     elif cmd in ["mute", "صامت", "كتم"]:
@@ -751,7 +978,7 @@ def execute_action(action_type, param=None):
                 "type": "volume",
                 "volume": cur_int,
                 "muted": True,
-                "message": "🔇 تم كتم صوت الحاسوب (Muted)."
+                "message": "🔇 PC audio muted."
             }
         else:
             return {
@@ -759,7 +986,7 @@ def execute_action(action_type, param=None):
                 "type": "volume",
                 "volume": cur_int,
                 "muted": False,
-                "message": "🔊 تم إلغاء كتم صوت الحاسوب (Unmuted)."
+                "message": "🔊 PC audio unmuted."
             }
 
     elif (cmd.startswith("sound") or cmd.startswith("vol") or 
@@ -774,7 +1001,7 @@ def execute_action(action_type, param=None):
                 "status": "success",
                 "type": "volume",
                 "volume": val,
-                "message": f"🔊 تم ضبط مستوى صوت الحاسوب على {val}%."
+                "message": f"🔊 PC system volume set to {val}%."
             }
         else:
             cur = get_system_volume()
@@ -787,21 +1014,28 @@ def execute_action(action_type, param=None):
                 "status": "success",
                 "type": "volume",
                 "volume": cur_int,
-                "message": f"🔊 مستوى صوت الحاسوب: {cur_str}\nيمكنك ضبط الصوت عبر الشريط أدناه:"
+                "message": f"🔊 PC system volume: {cur_str}\nAdjust volume using the slider below:"
             }
 
     elif cmd in ["status", "حالة", "info", "معلومات", "ping", "test"]:
         now_str = datetime.now().strftime("%Y-%m-%d %I:%M:%S %p")
         uname = platform.node()
         system_info = f"{platform.system()} {platform.release()}"
+        power_status = get_active_power_status()
+        extra_status = ""
+        if power_status:
+            act_name = power_status.get("action", "").title()
+            rem = power_status.get("remaining_human", "")
+            extra_status = f"\n\n⏱️ **Active Power Timer:**\n• Action: {act_name}\n• Remaining: {rem}\n💡 Send 'cancel' or 'stop' to abort anytime."
         return {
             "status": "success",
             "message": (
-                f"🟢 الحاسوب متصل ويعمل بشكل سليم!\n\n"
-                f"💻 اسم الجهاز: {uname}\n"
-                f"🖥️ النظام: {system_info}\n"
-                f"🕒 الوقت الحالي: {now_str}\n"
-                f"🌐 الشبكة: {', '.join(get_local_ips())}"
+                f"🟢 PC Remote Server is Online & Healthy!\n\n"
+                f"💻 Hostname: {uname}\n"
+                f"🖥️ OS: {system_info}\n"
+                f"🕒 Local Time: {now_str}\n"
+                f"🌐 Network IPs: {', '.join(get_local_ips())}"
+                f"{extra_status}"
             )
         }
 
@@ -810,25 +1044,25 @@ def execute_action(action_type, param=None):
         shell_cmd = action_type[4:].strip()
         try:
             res = subprocess.run(shell_cmd, shell=True, capture_output=True, text=True, timeout=10)
-            out = res.stdout or res.stderr or "(تم التنفيذ بدون مخرجات نصية)"
+            out = res.stdout or res.stderr or "(Executed with no text output)"
             if len(out) > 1500:
-                out = out[:1500] + "\n... (تم اقتطاع المخرجات الطويلة)"
+                out = out[:1500] + "\n... (Long output truncated)"
             return {
                 "status": "success" if res.returncode == 0 else "error",
-                "message": f"💻 مخرجات الأمر:\n{out}"
+                "message": f"💻 Command Output:\n{out}"
             }
         except subprocess.TimeoutExpired:
-            return {"status": "error", "message": "⏱️ انتهت مهلة تنفيذ الأمر (10s)."}
+            return {"status": "error", "message": "⏱️ Command execution timed out (10s)."}
         except Exception as e:
-            return {"status": "error", "message": f"❌ خطأ في تنفيذ الأمر: {str(e)}"}
+            return {"status": "error", "message": f"❌ Error executing command: {str(e)}"}
 
     elif cmd.startswith("open "):
         target = action_type[5:].strip()
         try:
             os.startfile(target)
-            return {"status": "success", "message": f"🚀 جاري فتح: {target}"}
+            return {"status": "success", "message": f"🚀 Opening: {target}"}
         except Exception as e:
-            return {"status": "error", "message": f"❌ تعذر الفتح: {str(e)}"}
+            return {"status": "error", "message": f"❌ Could not open: {str(e)}"}
 
     elif (cmd.startswith("screenshot") or cmd.startswith("ss") or 
           cmd.startswith("screen") or cmd.startswith("شاشة") or cmd.startswith("لقطة")):
@@ -847,23 +1081,23 @@ def execute_action(action_type, param=None):
         return {
             "status": "info",
             "message": (
-                f"📂 محتويات مجلد التنزيلات (Downloads):\n\n{flist}\n\n"
-                f"💡 يمكنك تصفح وتحميل أي ملف تريده بسهولة عبر الضغط على زر 📁 في الشريط العلوي للتطبيق!"
+                f"📂 Downloads Folder Contents:\n\n{flist}\n\n"
+                f"💡 You can browse and download any file using the 📁 button in the top bar!"
             )
         }
 
     elif cmd in ["clip", "clipboard", "حافظة", "الحافظة", "getclip"]:
         clip_txt = get_win_clipboard()
         if clip_txt:
-            preview = clip_txt if len(clip_txt) <= 500 else clip_txt[:500] + "\n...(تم اقتطاع النص الطويل)"
+            preview = clip_txt if len(clip_txt) <= 500 else clip_txt[:500] + "\n...(Long text truncated)"
             return {
                 "status": "success",
-                "message": f"📋 محتوى حافظة الحاسوب:\n\n{preview}"
+                "message": f"📋 PC Clipboard Content:\n\n{preview}"
             }
         else:
             return {
                 "status": "info",
-                "message": "📋 حافظة الحاسوب فارغة حالياً."
+                "message": "📋 PC clipboard is currently empty."
             }
 
     elif cmd.startswith("setclip ") or cmd.startswith("copy ") or cmd.startswith("نسخ "):
@@ -876,35 +1110,32 @@ def execute_action(action_type, param=None):
                 clipboard_cond.notify_all()
             return {
                 "status": "success",
-                "message": f"📋 تم نسخ النص إلى حافظة الحاسوب بنجاح:\n'{txt_to_set}'"
+                "message": f"📋 Text copied to PC clipboard successfully:\n'{txt_to_set}'"
             }
-        return {"status": "error", "message": "يرجى تحديد النص المراد نسخه."}
+        return {"status": "error", "message": "Please specify the text to copy."}
 
     else:
         return {
             "status": "unknown",
             "message": (
-                f"❓ أمر غير معروف: '{action_type}'\n\n"
-                "📌 الأوامر المدعومة:\n"
-                "• screenshot (أو ss) - التقاط لقطة لجميع الشاشات معاً\n"
-                "• screenshot 1 (أو ss 1) - التقاط لقطة للشاشة الأولى فقط\n"
-                "• screenshot 2 (أو ss 2) - التقاط لقطة للشاشة الثانية فقط\n"
-                "• files (أو ملفات) - استعراض الملفات في مجلد Downloads\n"
-                "• إرسال وسحب الملفات - عبر أزرار 📎 و 📁 في التطبيق مباشرة\n"
-                "• sleep rain <مدة> - تشغيل Rain.mp4 في وضع ملء الشاشة (مثال: sleep rain 15min)\n"
-                "• sleep rain <مدة> min - تشغيل Rain.mp4 مع تصغير كل النوافذ ليبقى الديسكتوب فقط\n"
-                "• s <0-100> (أو sound) - ضبط مستوى صوت الحاسوب (مثال: s 15 أو s 40)\n"
-                "• messi (أو m) - تشغيل فيديو Messi.mp4 بصوت 16% في وضع ملء الشاشة والتكرار\n"
-                "• stop (أو cancel) - إغلاق مشغل الفيديو وإلغاء أي موقت مجدول\n"
-                "• sleep (أو 'نوم') - وضع السكون المباشر\n"
-                "• hibernate (أو 'سبات') - الإسبات\n"
-                "• shutdown (أو 'طفي') - إيقاف التشغيل (10 ثوان)\n"
-                "• restart (أو 'إعادة تشغيل') - إعادة التشغيل\n"
-                "• lock (أو 'قفل') - قفل الشاشة\n"
-                "• mute (أو 'كتم') - تبديل كتم الصوت\n"
-                "• status (أو 'حالة') - فحص الاتصال ومعلومات الجهاز ومستوى الصوت\n"
-                "• open <رابط أو برنامج> - فتح تطبيق أو موقع\n"
-                "• cmd <أمر ويندوز> - تنفيذ أمر سطر الأوامر"
+                f"❓ Unknown command: '{action_type}'\n\n"
+                "📌 Supported Commands:\n"
+                "• screenshot (or ss) - Capture all displays combined\n"
+                "• screenshot 1 (or ss 1) - Capture Display 1 only\n"
+                "• screenshot 2 (or ss 2) - Capture Display 2 only\n"
+                "• files - Quick glance at Downloads folder\n"
+                "• sleep <duration> - Put PC to sleep (e.g. sleep 15m or sleep 1h)\n"
+                "• shutdown <duration> - Immediate or scheduled shutdown (e.g. shutdown 30m)\n"
+                "• hibernate <duration> - Immediate or scheduled hibernate\n"
+                "• restart <duration> - Immediate or scheduled restart\n"
+                "• sleep rain <duration> - Play Rain.mp4 with sleep timer\n"
+                "• sound <0-100> (or s <0-100>) - Set PC volume level\n"
+                "• mute / unmute - Toggle system sound mute\n"
+                "• lock - Lock Windows workstation\n"
+                "• status - View PC status, IP addresses, and active power timers\n"
+                "• cancel / stop - Abort any active media or scheduled power timer\n"
+                "• open <app/url> - Launch an application or open a webpage\n"
+                "• cmd <command> - Execute Windows command line tool"
             )
         }
 
@@ -1094,7 +1325,7 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
                     "filename": safe_filename,
                     "size": bytes_received,
                     "path": target_path,
-                    "message": f"📥 تم استلام الملف بنجاح وحفظه في مجلد التنزيلات (Downloads):\n📁 {safe_filename} ({size_str})"
+                    "message": f"📥 File received successfully in PC Downloads folder:\n📁 {safe_filename} ({size_str})"
                 }
                 body = json.dumps(response_data, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
@@ -1107,7 +1338,7 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
             except Exception as ex:
                 err_data = {
                     "status": "error",
-                    "message": f"❌ فشل حفظ الملف المرسل: {str(ex)}"
+                    "message": f"❌ Failed to save uploaded file: {str(ex)}"
                 }
                 body = json.dumps(err_data, ensure_ascii=False).encode("utf-8")
                 self.send_response(500)
@@ -1125,7 +1356,7 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
             try:
                 payload = json.loads(post_body)
                 if isinstance(payload, dict):
-                    command_text = payload.get("command", "") or payload.get("msg", "") or payload.get("text", "")
+                    command_text = payload.get("command", "") or payload.get("action", "") or payload.get("msg", "") or payload.get("text", "")
                 elif isinstance(payload, str):
                     command_text = payload
             except Exception:
@@ -1177,7 +1408,7 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
             resp = {
                 "status": "success" if success else "error",
                 "version": clipboard_version,
-                "message": "✅ تم نسخ النص إلى حافظة الحاسوب بنجاح" if success else "❌ تعذر تعيين الحافظة"
+                "message": "✅ Text copied to PC clipboard successfully" if success else "❌ Could not set PC clipboard"
             }
             body = json.dumps(resp, ensure_ascii=False).encode("utf-8")
             self.send_response(200 if success else 500)
@@ -1231,11 +1462,11 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
                 payload = {}
 
             file_path = payload.get("path", "")
-            dest_dir = payload.get("dest", "/sdcard/Download/")
+            raw_dest = payload.get("dest", "")
             phone_ip = payload.get("phone_ip", "") or self.client_address[0]
 
             if not file_path or not os.path.exists(file_path):
-                resp = {"status": "error", "message": "❌ الملف المطلوب غير موجود على الحاسوب"}
+                resp = {"status": "error", "message": "❌ Requested file does not exist on PC"}
                 body = json.dumps(resp, ensure_ascii=False).encode("utf-8")
                 self.send_response(400)
                 self._send_cors_headers()
@@ -1248,6 +1479,18 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
             filename = os.path.basename(file_path)
             size_bytes = os.path.getsize(file_path)
             size_str = format_size(size_bytes)
+
+            ext = os.path.splitext(filename)[1].lower()
+            MEDIA_EXTENSIONS = {
+                '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.heic', '.heif', '.svg', '.raw', '.dng',
+                '.mp4', '.mkv', '.mov', '.avi', '.webm', '.flv', '.wmv', '.3gp', '.m4v', '.ts'
+            }
+            if ext in MEDIA_EXTENSIONS:
+                dest_dir = "/sdcard/Pictures/"
+            elif raw_dest:
+                dest_dir = raw_dest
+            else:
+                dest_dir = "/sdcard/Download/"
 
             def scp_worker(src, dst_dir, target_ip, fname, sz_str):
                 key_path = os.path.expanduser(r"~/.ssh/id_ed25519")
@@ -1282,9 +1525,10 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
 
             resp = {
                 "status": "success",
-                "message": f"🚀 بدأ الإرسال عبر SSH إلى هاتفك في الخلفية!\n📁 {filename} ({size_str})\n📍 الوجهة: {dest_dir}",
+                "message": f"🚀 Starting background transfer via SSH to phone!\n📁 File: {filename} ({size_str})\n📍 Destination: {dest_dir}",
                 "filename": filename,
-                "size": size_str
+                "size": size_str,
+                "dest": dest_dir
             }
             body = json.dumps(resp, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
@@ -1347,6 +1591,7 @@ def start_udp_discovery_responder():
     t.start()
 
 def run():
+    init_power_scheduler()
     start_udp_discovery_responder()
     
     while True:

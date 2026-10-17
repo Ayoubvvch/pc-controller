@@ -1,7 +1,8 @@
-$shell = New-Object -ComObject Shell.Application
-$pythonw = "C:\Users\chyad\AppData\Local\Programs\Python\Python314\pythonw.exe"
-$script = "C:\Users\chyad\.gemini\antigravity\scratch\pc-controller\server\server.py"
-$dir = "C:\Users\chyad\.gemini\antigravity\scratch\pc-controller\server"
+$PSScriptDir = $PSScriptRoot
+$pythonCmd = (Get-Command python -ErrorAction SilentlyContinue).Source
+$pythonw = if ($pythonCmd) { Join-Path (Split-Path $pythonCmd) "pythonw.exe" } else { "pythonw.exe" }
+$script = Join-Path $PSScriptDir "server.py"
 
-$shell.ShellExecute($pythonw, "`"$script`"", $dir, "open", 0)
+$shell = New-Object -ComObject Shell.Application
+$shell.ShellExecute($pythonw, "`"$script`"", $PSScriptDir, "open", 0)
 Write-Host "Server launched via Explorer Shell!"

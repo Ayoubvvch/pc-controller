@@ -9,7 +9,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="⚙️ إعدادات الاتصال بالحاسوب"
+        android:text="⚙️ Connection Settings"
         android:textColor="@color/text_primary"
         android:textSize="18sp"
         android:textStyle="bold"
@@ -18,7 +18,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="عنوان IP الخاص بالحاسوب (Wi-Fi):"
+        android:text="PC IP Address (Wi-Fi):"
         android:textColor="@color/text_secondary"
         android:textSize="13sp"
         android:layout_marginBottom="4dp" />
@@ -30,7 +30,7 @@
         android:background="@drawable/bg_input"
         android:paddingStart="14dp"
         android:paddingEnd="14dp"
-        android:hint="192.168.11.110"
+        android:hint="192.168.1.100"
         android:textColorHint="@color/text_muted"
         android:textColor="@color/text_primary"
         android:inputType="textUri"
@@ -50,7 +50,7 @@
             android:id="@+id/tvAutoDiscoverText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="🔍 بحث تلقائي عن الحاسوب في الشبكة"
+            android:text="🔍 Auto-Discover PC in Network"
             android:textColor="@color/accent_blue"
             android:textSize="13sp"
             android:textStyle="bold" />
@@ -59,7 +59,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="المنفذ (Port):"
+        android:text="Port:"
         android:textColor="@color/text_secondary"
         android:textSize="13sp"
         android:layout_marginBottom="4dp" />
@@ -80,7 +80,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="💡 تأكد أن الحاسوب والهاتف متصلان بنفس شبكة الواي فاي، وأن سيرفر server.py يعمل على الحاسوب."
+        android:text="💡 Ensure your PC and Phone are on the same Wi-Fi network and the server is running."
         android:textColor="@color/text_muted"
         android:textSize="12sp"
         android:lineSpacingExtra="2dp" />

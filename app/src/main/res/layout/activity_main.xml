@@ -39,7 +39,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:text="⚪ جاري فحص الاتصال..."
+                android:text="⚪ Checking connection..."
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -106,7 +106,7 @@
                 android:background="@drawable/bg_chip"
                 android:clickable="true"
                 android:focusable="true"
-                android:text="📁 ملفات الحاسوب"
+                android:text="📁 PC Files"
                 android:textColor="@color/accent"
                 android:textSize="13sp" />
 
@@ -118,7 +118,7 @@
                 android:background="@drawable/bg_chip"
                 android:clickable="true"
                 android:focusable="true"
-                android:text="📸 الشاشتين"
+                android:text="📸 Both Displays"
                 android:textColor="@color/accent"
                 android:textSize="13sp" />
 
@@ -130,7 +130,7 @@
                 android:background="@drawable/bg_chip"
                 android:clickable="true"
                 android:focusable="true"
-                android:text="🖥️ شاشة 1"
+                android:text="🖥️ Display 1"
                 android:textColor="@color/text_primary"
                 android:textSize="13sp" />
 
@@ -142,7 +142,7 @@
                 android:background="@drawable/bg_chip"
                 android:clickable="true"
                 android:focusable="true"
-                android:text="🖥️ شاشة 2"
+                android:text="🖥️ Display 2"
                 android:textColor="@color/text_primary"
                 android:textSize="13sp" />
 
@@ -190,7 +190,7 @@
                 android:background="@drawable/bg_chip"
                 android:clickable="true"
                 android:focusable="true"
-                android:text="🎚️ شريط الصوت"
+                android:text="🎚️ Volume Slider"
                 android:textColor="@color/accent"
                 android:textSize="13sp" />
 

@@ -45,7 +45,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
-            android:text="📸 لقطة الشاشة"
+            android:text="📸 Screenshot"
             android:textColor="@color/text_primary"
             android:textSize="16sp"
             android:textStyle="bold" />
@@ -62,7 +62,7 @@
             android:gravity="center"
             android:paddingStart="10dp"
             android:paddingEnd="10dp"
-            android:text="🖼️ المعرض"
+            android:text="🖼️ Gallery"
             android:textColor="@color/text_primary"
             android:textSize="12sp"
             android:textStyle="bold" />
@@ -79,7 +79,7 @@
             android:gravity="center"
             android:paddingStart="10dp"
             android:paddingEnd="10dp"
-            android:text="📥 تحميل"
+            android:text="📥 Save"
             android:textColor="@color/accent"
             android:textSize="12sp"
             android:textStyle="bold" />
@@ -95,7 +95,7 @@
             android:gravity="center"
             android:paddingStart="10dp"
             android:paddingEnd="10dp"
-            android:text="↗️ مشاركة"
+            android:text="↗️ Share"
             android:textColor="@color/text_primary"
             android:textSize="12sp" />
 
@@ -117,7 +117,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="🔍 اسحب بإصبعين للتكبير أو انقر مرتين"
+            android:text="🔍 Pinch with two fingers to zoom or double-tap"
             android:textColor="#CBD5E1"
             android:textSize="12sp" />
     </LinearLayout>
