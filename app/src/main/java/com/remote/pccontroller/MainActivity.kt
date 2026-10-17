@@ -6,6 +6,9 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.appcompat.widget.SwitchCompat
 import android.text.Editable
 import android.text.TextWatcher
 import android.graphics.Bitmap
@@ -91,6 +94,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Notification permission launcher for Android 13+
+    private val requestNotificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            PcBackgroundService.start(this)
+            prefs.edit().putBoolean("keep_background", true).apply()
+            Toast.makeText(this, "🔄 Persistent background service started", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Notification permission is required for the background service", Toast.LENGTH_LONG).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -173,6 +189,11 @@ class MainActivity : AppCompatActivity() {
 
         // Handle incoming share if app was opened via Share Sheet
         handleIncomingShareIntent(intent)
+
+        // Keep persistent background service running if enabled
+        if (prefs.getBoolean("keep_background", false)) {
+            PcBackgroundService.start(this)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -1300,8 +1321,13 @@ class MainActivity : AppCompatActivity() {
         val btnAutoDiscover = view.findViewById<View>(R.id.btnAutoDiscover)
         val tvAutoDiscoverText = view.findViewById<TextView>(R.id.tvAutoDiscoverText)
 
+        val switchKeepBackground = view.findViewById<SwitchCompat>(R.id.switchKeepBackground)
+        val btnCheckUpdates = view.findViewById<View>(R.id.btnCheckUpdates)
+        val tvCheckUpdatesText = view.findViewById<TextView>(R.id.tvCheckUpdatesText)
+
         etIp.setText(prefs.getString("pc_ip", "192.168.11.110"))
         etPort.setText(prefs.getString("pc_port", "5050"))
+        switchKeepBackground?.isChecked = prefs.getBoolean("keep_background", false)
 
         btnAutoDiscover?.setOnClickListener {
             tvAutoDiscoverText?.text = "⏳ Searching network..."
@@ -1316,11 +1342,17 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
+        btnCheckUpdates?.setOnClickListener {
+            checkForUpdates(tvCheckUpdatesText)
+        }
+
         AlertDialog.Builder(this)
             .setView(view)
             .setPositiveButton("Save") { _, _ ->
                 val newIp = etIp.text.toString().trim()
                 val newPort = etPort.text.toString().trim()
+                val isBgEnabled = switchKeepBackground?.isChecked ?: false
+
                 if (newIp.isNotEmpty()) {
                     prefs.edit()
                         .putString("pc_ip", newIp)
@@ -1329,9 +1361,89 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "Settings saved", Toast.LENGTH_SHORT).show()
                     checkConnection()
                 }
+
+                // Handle background service toggle
+                val wasBgEnabled = prefs.getBoolean("keep_background", false)
+                if (isBgEnabled != wasBgEnabled) {
+                    if (isBgEnabled) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                            requestNotificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            PcBackgroundService.start(this)
+                            prefs.edit().putBoolean("keep_background", true).apply()
+                            Toast.makeText(this, "🔄 Persistent background service started", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        PcBackgroundService.stop(this)
+                        prefs.edit().putBoolean("keep_background", false).apply()
+                        Toast.makeText(this, "Background service stopped", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun checkForUpdates(statusView: TextView?) {
+        statusView?.text = "⏳ Checking GitHub Releases..."
+        val request = Request.Builder()
+            .url("https://api.github.com/repos/Ayoubvvch/pc-controller/releases/latest")
+            .header("User-Agent", "PCRemote-Android")
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                runOnUiThread {
+                    statusView?.text = "❌ Check failed: ${e.message}"
+                    Toast.makeText(this@MainActivity, "Could not check for updates", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val body = response.body?.string() ?: ""
+                try {
+                    val json = JSONObject(body)
+                    val tagName = json.optString("tag_name", "")
+                    val assets = json.optJSONArray("assets")
+                    var apkUrl: String? = null
+                    if (assets != null) {
+                        for (i in 0 until assets.length()) {
+                            val asset = assets.getJSONObject(i)
+                            val name = asset.optString("name", "")
+                            if (name.endsWith(".apk")) {
+                                apkUrl = asset.optString("browser_download_url")
+                                break
+                            }
+                        }
+                    }
+
+                    runOnUiThread {
+                        val currentVersion = "v2.0.6"
+                        if (tagName.isNotEmpty() && tagName != currentVersion) {
+                            statusView?.text = "🚀 New update available: $tagName"
+                            AlertDialog.Builder(this@MainActivity)
+                                .setTitle("🚀 New Version Available: $tagName")
+                                .setMessage("A new version ($tagName) is available on GitHub with the latest improvements!\n\nWould you like to download and install it?")
+                                .setPositiveButton("Download & Update") { _, _ ->
+                                    val targetUrl = apkUrl ?: "https://github.com/Ayoubvvch/pc-controller/releases/latest"
+                                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
+                                    startActivity(browserIntent)
+                                }
+                                .setNegativeButton("Later", null)
+                                .show()
+                        } else {
+                            statusView?.text = "✅ App is up to date ($currentVersion)"
+                            Toast.makeText(this@MainActivity, "You have the latest version ($currentVersion)!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    runOnUiThread {
+                        statusView?.text = "❌ Error parsing update info"
+                    }
+                }
+            }
+        })
     }
 
     private fun showPasteToPcDialog() {

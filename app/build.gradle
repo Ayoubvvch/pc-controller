@@ -11,16 +11,27 @@ android {
         applicationId "com.remote.pccontroller"
         minSdk 24
         targetSdk 34
-        versionCode 14
-        versionName "2.0.5"
+        versionCode 15
+        versionName "2.0.6"
+    }
+
+    signingConfigs {
+        release {
+            storeFile file("release.keystore")
+            storePassword "pcremote123"
+            keyAlias "pcremote"
+            keyPassword "pcremote123"
+        }
     }
 
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
+            signingConfig signingConfigs.release
             applicationIdSuffix ""
             debuggable true
         }

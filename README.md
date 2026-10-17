@@ -1,4 +1,4 @@
-# 🎮 PC Controller (v2.0.5)
+# 🎮 PC Controller (v2.0.6)
 
 > A lightweight, blazing-fast, and secure client-server system to remotely monitor, manage, and interact with your Windows PC from an Android device over your local Wi-Fi network.
 
@@ -20,7 +20,8 @@
 │  • Pinch-to-Zoom Screenshot Preview    │                                                     │  • Windows CoreAudio Native API        │
 │  • Direct SSH Background File Download │ <══════════════════════════════════════════════════ │  • 24/7 Watchdog Recovery Service      │
 │  • Instant Clipboard Synchronization  │                                                     │  • Absolute Persistent Power Scheduler │
-└────────────────────────────────────────┘                 Direct Background SSH/SCP           └────────────────────────────────────────┘
+│  • Persistent Background Service       │                 Direct Background SSH/SCP           │                                        │
+└────────────────────────────────────────┘                                                     └────────────────────────────────────────┘
 ```
 
 ---
@@ -33,13 +34,13 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 ┌───────────────────────────────────────┐          ┌───────────────────────────────────────┐
 │           📱 For Your Phone           │          │           💻 For Your PC              │
 │                                       │          │                                       │
-│  Download: PCRemote-v2.0.5.apk        │          │  Download: pc-controller-server.zip   │
+│  Download: PCRemote-v2.0.6.apk        │          │  Download: pc-controller-server.zip   │
 │  (Directly from GitHub Releases)      │          │  (Or use the `server/` folder)        │
 └───────────────────────────────────────┘          └───────────────────────────────────────┘
 ```
 
 ### 1. 📱 Android Setup (Mobile Device)
-1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.0.5.apk`**.
+1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.0.6.apk`**.
 2. Install the APK on your Android phone.
 3. Open the app. When connected to the same Wi-Fi, it will automatically discover your PC via UDP broadcast.
 
@@ -89,12 +90,22 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 * **Instant Native Windows Clipboard:** Text is immediately set in the Windows PC clipboard using native Win32 API. Press `Ctrl + V` anywhere on your computer to paste instantly!
 * **Chat Command Support:** You can also type `clip <text>`, `copy <text>`, or `setclip <text>` directly into the command bar.
 
-### 🔊 6. Real-Time Volume Control
+### 🔄 6. Persistent Background Service & Notification Action
+* **Stay Active 24/7:** Enable **"Keep Active in Background"** in Settings to prevent Android from terminating the app when minimized or when the screen turns off.
+* **Notification Bar Quick Action:** Displays a persistent system notification with a direct **"📋 Send Clipboard"** button.
+* **Instant Sync from Anywhere:** Tap the notification action from any app (browser, YouTube, chats) to immediately send your copied text to your PC without opening the full app!
+
+### 🔑 7. Permanent Keystore & Seamless In-Place Updates
+* **Fixed Signing Certificate:** Built with a committed cryptographic keystore (`release.keystore`), guaranteeing identical signatures for all builds.
+* **No More Uninstalling:** Every update can be installed directly over existing versions with one click.
+* **In-App Update Checker:** Check for new releases directly from Settings with one-click download.
+
+### 🔊 8. Real-Time Volume Control
 * Adjust master Windows audio volume using the native CoreAudio API (`vol.exe`).
 * Visual interactive volume slider in mobile chat.
 * Quick preset chips (`15%`, `25%`, `40%`, `50%`, `75%`, `100%`) and `mute` / `unmute` toggles.
 
-### 🌧️ 7. Ambient Automations
+### 🌧️ 9. Ambient Automations
 * `sleep rain 15m` — Launches `Rain.mp4` via mpv in fullscreen loop mode, adjusts volume to 28%, and automatically suspends the PC when the timer ends.
 * `sleep rain 15m min` — Minimizes all open windows so only a clean black desktop remains while audio plays, then enters sleep mode.
 * `cancel` / `stop` — Instantly stops media playback and cancels any active power scheduler.

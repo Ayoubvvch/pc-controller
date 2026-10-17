@@ -31,7 +31,7 @@ jobs:
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Rename APK for release
-        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.0.5.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.0.6.apk
 
       - name: Package Windows Server Bundle
         run: |
@@ -41,7 +41,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PCRemote-APK
-          path: PCRemote-v2.0.5.apk
+          path: PCRemote-v2.0.6.apk
 
       - name: Upload Server Artifact
         uses: actions/upload-artifact@v4
@@ -53,32 +53,33 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         with:
-          tag_name: v2.0.5
-          name: "PC Remote v2.0.5"
+          tag_name: v2.0.6
+          name: "PC Remote v2.0.6"
           body: |
-            ### 🚀 PC Remote Control (Release v2.0.5)
+            ### 🚀 PC Remote Control (Release v2.0.6)
 
             #### 📦 Downloads
-            * **📱 For Android Phones:** Download **`PCRemote-v2.0.5.apk`** below and install on your phone.
+            * **📱 For Android Phones:** Download **`PCRemote-v2.0.6.apk`** below and install on your phone.
             * **💻 For Windows PCs:** Download **`pc-controller-server-windows.zip`** below, extract anywhere, and double-click **`start.bat`**.
 
             ---
 
-            #### ✨ What's New in v2.0.5:
+            #### ✨ What's New in v2.0.6:
+            * 🔑 **Permanent Keystore & Seamless In-Place Updates:**
+              * Built and signed with a permanent cryptographic release keystore (`release.keystore`).
+              * **No more uninstalling required!** All future updates can be installed directly over existing versions with one tap.
+            * 🔄 **Persistent Background Service & Notification:**
+              * Added toggle in Settings: **"Keep Active in Background"**.
+              * Displays a persistent status notification in Android's notification bar to prevent the system from killing the app.
+              * Features a direct **"📋 Send Clipboard"** action button in the notification drawer to sync text to PC instantly from anywhere!
+            * 🚀 **In-App Update Checker:**
+              * Added **"Check for App Updates"** button in Settings with direct GitHub Releases integration and one-click download.
             * 📋 **Instant Clipboard Sync (Phone ➔ PC):**
-              * Added dedicated **Clipboard button** (`📋`) directly in the message bar and top quick actions chips.
-              * Convenient dialog allows pasting any text, URL, code snippet, or document text with one-click **"Paste from Phone"** button.
-              * Text is instantly copied to your Windows PC clipboard via native Win32 API — ready to paste immediately (`Ctrl + V`) anywhere on your computer.
-            * 💬 **Chat Clipboard Commands:**
-              * You can now also type `clip <text>`, `copy <text>`, or `setclip <text>` directly into the command bar to copy to PC clipboard.
+              * Dedicated button in bottom bar, quick actions chip, transparent action activity, and chat commands (`clip <text>`, `copy <text>`).
             * 🌐 **Full English Interface & Documentation:**
-              * Completely localized mobile app UI, layout resources, server API responses, and setup guides.
-            * ⚡ **Persistent Power Scheduler:**
-              * Scheduled sleep/shutdown timers (`sleep 15m`, `shutdown 30m`) are preserved across screen locks (`Win + L`) and server restarts.
-            * 🛠️ **Simplified One-Click Windows Tooling:**
-              * `start.bat`, `stop.bat`, `status.bat`, and autostart installers.
+              * 100% English UI, layouts, and server responses.
           files: |
-            PCRemote-v2.0.5.apk
+            PCRemote-v2.0.6.apk
             pc-controller-server-windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
