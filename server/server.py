@@ -1100,17 +1100,19 @@ def execute_action(action_type, param=None):
                 "message": "📋 PC clipboard is currently empty."
             }
 
-    elif cmd.startswith("setclip ") or cmd.startswith("copy ") or cmd.startswith("نسخ "):
+    elif cmd.startswith("setclip ") or cmd.startswith("copy ") or cmd.startswith("نسخ ") or cmd.startswith("clip ") or cmd.startswith("clipboard ") or cmd.startswith("paste "):
         txt_to_set = action_type.split(" ", 1)[1] if " " in action_type else ""
         if txt_to_set:
+            global current_clipboard_text, clipboard_version
             with clipboard_cond:
-                set_win_clipboard(txt_to_set)
-                current_clipboard_text = txt_to_set
-                clipboard_version += 1
-                clipboard_cond.notify_all()
+                success = set_win_clipboard(txt_to_set)
+                if txt_to_set != current_clipboard_text:
+                    current_clipboard_text = txt_to_set
+                    clipboard_version += 1
+                    clipboard_cond.notify_all()
             return {
-                "status": "success",
-                "message": f"📋 Text copied to PC clipboard successfully:\n'{txt_to_set}'"
+                "status": "success" if success else "error",
+                "message": f"📋 Text copied to PC clipboard successfully:\n'{txt_to_set}'" if success else "❌ Could not set PC clipboard"
             }
         return {"status": "error", "message": "Please specify the text to copy."}
 
@@ -1395,26 +1397,26 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
 
             success = False
             with clipboard_cond:
+                success = set_win_clipboard(new_text)
                 if new_text != current_clipboard_text:
-                    success = set_win_clipboard(new_text)
                     current_clipboard_text = new_text
                     clipboard_version += 1
                     clipboard_cond.notify_all()
-                    preview = new_text[:35].replace('\n', ' ').strip()
-                    print(f"[CLIPBOARD] Phone -> PC set clipboard (v{clipboard_version}, len={len(new_text)}): '{preview}'")
-                else:
-                    success = True
+                preview = new_text[:50].replace('\n', ' ').strip()
+                print(f"[CLIPBOARD] Phone -> PC set clipboard (v{clipboard_version}, len={len(new_text)}): '{preview}'")
 
             resp = {
                 "status": "success" if success else "error",
                 "version": clipboard_version,
-                "message": "✅ Text copied to PC clipboard successfully" if success else "❌ Could not set PC clipboard"
+                "message": "📋 Text copied to PC clipboard successfully!" if success else "❌ Could not set PC clipboard"
             }
             body = json.dumps(resp, ensure_ascii=False).encode("utf-8")
             self.send_response(200 if success else 500)
             self._send_cors_headers()
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
         elif parsed.path in ["/api/volume", "/volume"]:
             content_len = int(self.headers.get("Content-Length", 0))
             post_body = self.rfile.read(content_len).decode("utf-8").strip()

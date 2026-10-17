@@ -72,5 +72,6 @@ server/
 ## 🛡️ Key Features
 
 * **Zero-Config Auto-Discovery:** When your phone is on the same Wi-Fi, the app automatically finds this PC using UDP broadcast on port 5051.
+* **Instant Native Clipboard Sync:** Seamlessly receive text copied from your phone directly into the Windows clipboard via native Win32 APIs, ready to paste (`Ctrl + V`) immediately anywhere.
 * **Persistent Power Scheduler:** Scheduled sleep or shutdown timers (`sleep 15m`, `shutdown 30m`) are saved to disk and registered with Windows Kernel/Task Scheduler, surviving screen locks (Win+L) and reboots.
 * **Smart Background Transfer:** Files transferred from PC explorer to mobile use direct background SSH/SCP so transfers continue even if the screen turns off.

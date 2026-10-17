@@ -31,7 +31,7 @@ jobs:
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Rename APK for release
-        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.0.4.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.0.5.apk
 
       - name: Package Windows Server Bundle
         run: |
@@ -41,7 +41,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PCRemote-APK
-          path: PCRemote-v2.0.4.apk
+          path: PCRemote-v2.0.5.apk
 
       - name: Upload Server Artifact
         uses: actions/upload-artifact@v4
@@ -53,29 +53,32 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         with:
-          tag_name: v2.0.4
-          name: "PC Remote v2.0.4"
+          tag_name: v2.0.5
+          name: "PC Remote v2.0.5"
           body: |
-            ### 🚀 PC Remote Control (Release v2.0.4)
+            ### 🚀 PC Remote Control (Release v2.0.5)
 
             #### 📦 Downloads
-            * **📱 For Android Phones:** Download **`PCRemote-v2.0.4.apk`** below and install on your phone.
+            * **📱 For Android Phones:** Download **`PCRemote-v2.0.5.apk`** below and install on your phone.
             * **💻 For Windows PCs:** Download **`pc-controller-server-windows.zip`** below, extract anywhere, and double-click **`start.bat`**.
 
             ---
 
-            #### ✨ What's New in v2.0.4:
-            * 🌐 **Full English Interface & Documentation:** The entire mobile app UI, layout resources, server API responses, and setup guides are now completely in English.
-            * ⚡ **Persistent Power Scheduler:** Scheduled sleep/shutdown timers (`sleep 15m`, `shutdown 30m`) are preserved across screen locks (`Win + L`) and server restarts with Windows kernel backups.
-            * 📂 **Smart Media Download Routing:** Photos and videos downloaded via remote explorer or background SSH are now automatically directed to `/sdcard/Pictures/` for instant gallery visibility, while documents go to `/sdcard/Download/`.
+            #### ✨ What's New in v2.0.5:
+            * 📋 **Instant Clipboard Sync (Phone ➔ PC):**
+              * Added dedicated **Clipboard button** (`📋`) directly in the message bar and top quick actions chips.
+              * Convenient dialog allows pasting any text, URL, code snippet, or document text with one-click **"Paste from Phone"** button.
+              * Text is instantly copied to your Windows PC clipboard via native Win32 API — ready to paste immediately (`Ctrl + V`) anywhere on your computer.
+            * 💬 **Chat Clipboard Commands:**
+              * You can now also type `clip <text>`, `copy <text>`, or `setclip <text>` directly into the command bar to copy to PC clipboard.
+            * 🌐 **Full English Interface & Documentation:**
+              * Completely localized mobile app UI, layout resources, server API responses, and setup guides.
+            * ⚡ **Persistent Power Scheduler:**
+              * Scheduled sleep/shutdown timers (`sleep 15m`, `shutdown 30m`) are preserved across screen locks (`Win + L`) and server restarts.
             * 🛠️ **Simplified One-Click Windows Tooling:**
-              * `start.bat`: Launch server and self-healing watchdog in the background.
-              * `stop.bat`: Cleanly stop server processes.
-              * `status.bat`: Live health check and local IP inspector.
-              * `install_autostart.bat` & `uninstall_autostart.bat`: Toggle automatic Windows boot startup without admin prompts.
-            * 📸 **Enhanced Multi-Monitor Previews:** Dual-display support with pinch-to-zoom and direct native share-sheet integration.
+              * `start.bat`, `stop.bat`, `status.bat`, and autostart installers.
           files: |
-            PCRemote-v2.0.4.apk
+            PCRemote-v2.0.5.apk
             pc-controller-server-windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

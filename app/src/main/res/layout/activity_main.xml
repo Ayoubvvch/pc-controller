@@ -111,6 +111,18 @@
                 android:textSize="13sp" />
 
             <TextView
+                android:id="@+id/chipClipboard"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_chip"
+                android:clickable="true"
+                android:focusable="true"
+                android:text="📋 Paste to PC"
+                android:textColor="@color/accent"
+                android:textSize="13sp" />
+
+            <TextView
                 android:id="@+id/chipScreenshotAll"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -352,6 +364,17 @@
             android:padding="11dp"
             android:src="@drawable/ic_attach"
             app:tint="@color/text_muted" />
+
+        <ImageButton
+            android:id="@+id/btnClipboard"
+            android:layout_width="46dp"
+            android:layout_height="46dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_chip"
+            android:contentDescription="Paste to PC Clipboard"
+            android:padding="11dp"
+            android:src="@drawable/ic_clipboard"
+            app:tint="@color/accent" />
 
         <EditText
             android:id="@+id/etCommand"

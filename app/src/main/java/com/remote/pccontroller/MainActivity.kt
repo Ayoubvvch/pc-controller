@@ -2,9 +2,12 @@ package com.remote.pccontroller
 
 import android.app.AlertDialog
 import android.app.Dialog
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.text.Editable
+import android.text.TextWatcher
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -73,6 +76,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etCommand: EditText
     private lateinit var btnSend: ImageButton
     private lateinit var btnAttach: ImageButton
+    private lateinit var btnClipboard: ImageButton
     private lateinit var btnBrowseFiles: ImageButton
     private lateinit var btnSettings: ImageButton
     private lateinit var btnRefresh: ImageButton
@@ -98,6 +102,7 @@ class MainActivity : AppCompatActivity() {
         etCommand = findViewById(R.id.etCommand)
         btnSend = findViewById(R.id.btnSend)
         btnAttach = findViewById(R.id.btnAttach)
+        btnClipboard = findViewById(R.id.btnClipboard)
         btnBrowseFiles = findViewById(R.id.btnBrowseFiles)
         btnSettings = findViewById(R.id.btnSettings)
         btnRefresh = findViewById(R.id.btnRefresh)
@@ -137,6 +142,10 @@ class MainActivity : AppCompatActivity() {
 
         btnAttach.setOnClickListener {
             filePickerLauncher.launch("*/*")
+        }
+
+        btnClipboard.setOnClickListener {
+            showPasteToPcDialog()
         }
 
         btnBrowseFiles.setOnClickListener {
@@ -218,6 +227,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupQuickChips() {
         findViewById<TextView>(R.id.chipBrowseFiles)?.setOnClickListener { showFileBrowserDialog() }
+        findViewById<TextView>(R.id.chipClipboard)?.setOnClickListener { showPasteToPcDialog() }
         findViewById<TextView>(R.id.chipScreenshotAll)?.setOnClickListener { sendCommand("screenshot all") }
         findViewById<TextView>(R.id.chipScreenshot1)?.setOnClickListener { sendCommand("screenshot 1") }
         findViewById<TextView>(R.id.chipScreenshot2)?.setOnClickListener { sendCommand("screenshot 2") }
@@ -1322,5 +1332,149 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun showPasteToPcDialog() {
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_paste_clipboard, null)
+        val etText = view.findViewById<EditText>(R.id.etClipboardText)
+        val btnPasteFromPhone = view.findViewById<TextView>(R.id.btnPasteFromPhone)
+        val btnClear = view.findViewById<TextView>(R.id.btnClearText)
+        val tvCharCount = view.findViewById<TextView>(R.id.tvCharCount)
+
+        fun updateCount() {
+            val len = etText?.text?.length ?: 0
+            tvCharCount?.text = "$len character${if (len == 1) "" else "s"}"
+        }
+
+        etText?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                updateCount()
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+        val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        if (clipboardManager != null && clipboardManager.hasPrimaryClip()) {
+            val clipData = clipboardManager.primaryClip
+            if (clipData != null && clipData.itemCount > 0) {
+                val text = clipData.getItemAt(0)?.coerceToText(this)?.toString()
+                if (!text.isNullOrBlank()) {
+                    etText?.setText(text)
+                    etText?.setSelection(text.length)
+                    updateCount()
+                }
+            }
+        }
+
+        btnPasteFromPhone?.setOnClickListener {
+            if (clipboardManager != null && clipboardManager.hasPrimaryClip()) {
+                val clipData = clipboardManager.primaryClip
+                if (clipData != null && clipData.itemCount > 0) {
+                    val text = clipData.getItemAt(0)?.coerceToText(this)?.toString()
+                    if (!text.isNullOrBlank()) {
+                        etText?.setText(text)
+                        etText?.setSelection(text.length)
+                        updateCount()
+                        Toast.makeText(this, "📋 Pasted from phone clipboard", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, "Phone clipboard is empty", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Toast.makeText(this, "Phone clipboard is empty", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                Toast.makeText(this, "Phone clipboard is empty", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnClear?.setOnClickListener {
+            etText?.setText("")
+            updateCount()
+        }
+
+        AlertDialog.Builder(this)
+            .setView(view)
+            .setPositiveButton("🚀 Send to PC") { _, _ ->
+                val textToSend = etText?.text?.toString() ?: ""
+                if (textToSend.isBlank()) {
+                    Toast.makeText(this, "Please enter or paste some text first", Toast.LENGTH_SHORT).show()
+                } else {
+                    sendClipboardToPc(textToSend)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun sendClipboardToPc(text: String, isRetry: Boolean = false) {
+        val preview = if (text.length > 80) text.take(80) + "..." else text
+        if (!isRetry) {
+            addUserMessage("📋 [Sent to PC Clipboard]:\n$preview")
+        }
+
+        val baseUrl = getBaseUrl()
+        val jsonPayload = JSONObject().apply {
+            put("text", text)
+        }.toString()
+
+        val requestBody = jsonPayload.toRequestBody("application/json; charset=utf-8".toMediaType())
+        val request = Request.Builder()
+            .url("$baseUrl/api/clipboard")
+            .post(requestBody)
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                runOnUiThread {
+                    if (!isRetry) {
+                        tvConnectionStatus.text = "🟡 Auto-discovering PC in network..."
+                        tvConnectionStatus.setTextColor(Color.parseColor("#F59E0B"))
+                        discoverPcServer(
+                            onSuccess = {
+                                sendClipboardToPc(text, isRetry = true)
+                            },
+                            onFailed = {
+                                addPcMessage("❌ Failed to send text to PC clipboard ($baseUrl)\nCheck your connection and ensure the server is running.")
+                                tvConnectionStatus.text = "🔴 Disconnected ($baseUrl)"
+                                tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
+                                Toast.makeText(this@MainActivity, "Connection failed", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    } else {
+                        addPcMessage("❌ Failed to send text to PC clipboard ($baseUrl)\nEnsure the server is running and connected to Wi-Fi.")
+                        tvConnectionStatus.text = "🔴 Disconnected ($baseUrl)"
+                        tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
+                    }
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val body = response.body?.string() ?: ""
+                var success = response.isSuccessful
+                var message = "📋 Text copied to PC clipboard successfully!"
+                try {
+                    val json = JSONObject(body)
+                    if (json.has("message")) {
+                        message = json.getString("message")
+                    }
+                    if (json.optString("status") == "error") {
+                        success = false
+                    }
+                } catch (ignored: Exception) {}
+
+                runOnUiThread {
+                    tvConnectionStatus.text = "🟢 Connected ($baseUrl)"
+                    tvConnectionStatus.setTextColor(Color.parseColor("#10B981"))
+                    if (success) {
+                        val fullReply = "$message\n\nPreview: \"$preview\"\n\n💡 Ready! Press Ctrl + V on your PC to paste."
+                        addPcMessage(fullReply)
+                        Toast.makeText(this@MainActivity, "📋 Copied to PC clipboard!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        addPcMessage("❌ Could not copy to PC clipboard: $message")
+                    }
+                }
+            }
+        })
     }
 }
