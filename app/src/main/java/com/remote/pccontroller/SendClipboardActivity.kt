@@ -2,9 +2,11 @@ package com.remote.pccontroller
 
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import okhttp3.MediaType.Companion.toMediaType
@@ -27,20 +29,45 @@ class SendClipboardActivity : AppCompatActivity() {
         .build()
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var hasProcessed = false
+    private val fallbackRunnable = Runnable {
+        if (!hasProcessed && !isFinishing) {
+            processAndSendClipboard()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         overridePendingTransition(0, 0)
 
-        val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        if (clipboardManager == null || !clipboardManager.hasPrimaryClip()) {
-            Toast.makeText(applicationContext, "⚠️ Phone clipboard is empty", Toast.LENGTH_SHORT).show()
-            finish()
-            overridePendingTransition(0, 0)
-            return
-        }
+        // Set invisible dummy view so WindowManager creates a surface and grants window focus
+        setContentView(View(this))
 
-        val clipData = clipboardManager.primaryClip
+        // Collapse notification shade
+        try {
+            @Suppress("DEPRECATION")
+            sendBroadcast(Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS))
+        } catch (ignored: Exception) {}
+
+        // Fallback timer in case onWindowFocusChanged is delayed
+        mainHandler.postDelayed(fallbackRunnable, 600)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && !hasProcessed) {
+            mainHandler.removeCallbacks(fallbackRunnable)
+            processAndSendClipboard()
+        }
+    }
+
+    private fun processAndSendClipboard() {
+        if (hasProcessed) return
+        hasProcessed = true
+        mainHandler.removeCallbacks(fallbackRunnable)
+
+        val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        val clipData = clipboardManager?.primaryClip
         if (clipData == null || clipData.itemCount == 0) {
             Toast.makeText(applicationContext, "⚠️ Phone clipboard is empty", Toast.LENGTH_SHORT).show()
             finish()

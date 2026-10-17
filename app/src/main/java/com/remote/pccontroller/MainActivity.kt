@@ -1419,7 +1419,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     runOnUiThread {
-                        val currentVersion = "v2.0.6"
+                        val currentVersion = "v2.0.7"
                         if (tagName.isNotEmpty() && tagName != currentVersion) {
                             statusView?.text = "🚀 New update available: $tagName"
                             AlertDialog.Builder(this@MainActivity)

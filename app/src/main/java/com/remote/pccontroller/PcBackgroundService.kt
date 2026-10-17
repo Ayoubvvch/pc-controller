@@ -74,7 +74,7 @@ class PcBackgroundService : Service() {
 
         // Tap "Send Clipboard" action button to trigger instant sync
         val sendClipboardIntent = Intent(this, SendClipboardActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val sendClipboardPendingIntent = PendingIntent.getActivity(
             this,
