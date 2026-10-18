@@ -352,6 +352,55 @@
         app:layout_constraintBottom_toTopOf="@id/bottomInputLayout"
         app:layout_constraintTop_toBottomOf="@id/quickActionsScroll" />
 
+    <!-- Floating Volume HUD (shown when hardware volume keys are pressed) -->
+    <LinearLayout
+        android:id="@+id/layoutVolumeHud"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/bg_volume_panel"
+        android:elevation="12dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="10dp"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/quickActionsScroll">
+
+        <TextView
+            android:id="@+id/tvVolumeHudIcon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🔊"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/tvVolumeHudText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="PC Volume: 50%"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <ProgressBar
+            android:id="@+id/pbVolumeHud"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="100dp"
+            android:layout_height="8dp"
+            android:layout_marginStart="12dp"
+            android:max="100"
+            android:progress="50"
+            android:progressBackgroundTint="@color/surface_variant"
+            android:progressTint="@color/accent" />
+
+    </LinearLayout>
+
     <!-- Bottom Command Input Bar -->
     <LinearLayout
         android:id="@+id/bottomInputLayout"

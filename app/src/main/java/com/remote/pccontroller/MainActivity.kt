@@ -21,6 +21,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.OpenableColumns
 import android.util.Base64
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -28,6 +29,8 @@ import android.view.Window
 import android.view.inputmethod.EditorInfo
 import android.os.Handler
 import android.os.Looper
+import android.widget.Button
+import java.util.Locale
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -108,6 +111,25 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Notification permission is required for the background service", Toast.LENGTH_LONG).show()
         }
     }
+
+    // In-app Update Installation permission launcher (Android 8+)
+    private var pendingApkToInstall: File? = null
+    private val installPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (packageManager.canRequestPackageInstalls()) {
+                pendingApkToInstall?.let { launchPackageInstaller(it) }
+            } else {
+                Toast.makeText(this, "Permission not granted to install update", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    // Hardware volume buttons & HUD
+    private var cachedPcVolume: Int = 50
+    private val hudHandler = Handler(Looper.getMainLooper())
+    private var hideHudRunnable: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -204,6 +226,31 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIncomingShareIntent(intent)
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        val isHwVolumeEnabled = prefs.getBoolean("hw_volume_control", true)
+        if (isHwVolumeEnabled) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_VOLUME_UP -> {
+                    adjustPcVolumeDelta(+5)
+                    return true
+                }
+                KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                    adjustPcVolumeDelta(-5)
+                    return true
+                }
+            }
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        val isHwVolumeEnabled = prefs.getBoolean("hw_volume_control", true)
+        if (isHwVolumeEnabled && (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
     }
 
     private fun handleIncomingShareIntent(intent: Intent?) {
@@ -503,6 +550,7 @@ class MainActivity : AppCompatActivity() {
                     if (successful) {
                         tvConnectionStatus.text = "🟢 Connected ($baseUrl)"
                         tvConnectionStatus.setTextColor(Color.parseColor("#10B981"))
+                        fetchCurrentPcVolume()
                     } else {
                         tvConnectionStatus.text = "🔴 Response Error ($baseUrl)"
                         tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
@@ -575,6 +623,7 @@ class MainActivity : AppCompatActivity() {
                     if (isSoundCmd || json.optString("type") == "volume" || json.has("volume")) {
                         isVolumeControl = true
                         volumeLevel = json.optInt("volume", 50)
+                        cachedPcVolume = volumeLevel
                     }
                 } catch (ignored: Exception) {
                     if (isSoundCmd) {
@@ -1327,12 +1376,14 @@ class MainActivity : AppCompatActivity() {
         val tvAutoDiscoverText = view.findViewById<TextView>(R.id.tvAutoDiscoverText)
 
         val switchKeepBackground = view.findViewById<SwitchCompat>(R.id.switchKeepBackground)
+        val switchHwVolume = view.findViewById<SwitchCompat>(R.id.switchHwVolume)
         val btnCheckUpdates = view.findViewById<View>(R.id.btnCheckUpdates)
         val tvCheckUpdatesText = view.findViewById<TextView>(R.id.tvCheckUpdatesText)
 
         etIp.setText(prefs.getString("pc_ip", "192.168.11.110"))
         etPort.setText(prefs.getString("pc_port", "5050"))
         switchKeepBackground?.isChecked = prefs.getBoolean("keep_background", false)
+        switchHwVolume?.isChecked = prefs.getBoolean("hw_volume_control", true)
 
         btnAutoDiscover?.setOnClickListener {
             tvAutoDiscoverText?.text = "⏳ Searching network..."
@@ -1357,6 +1408,9 @@ class MainActivity : AppCompatActivity() {
                 val newIp = etIp.text.toString().trim()
                 val newPort = etPort.text.toString().trim()
                 val isBgEnabled = switchKeepBackground?.isChecked ?: false
+                val isHwVolEnabled = switchHwVolume?.isChecked ?: true
+
+                prefs.edit().putBoolean("hw_volume_control", isHwVolEnabled).apply()
 
                 if (newIp.isNotEmpty()) {
                     prefs.edit()
@@ -1424,16 +1478,20 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     runOnUiThread {
-                        val currentVersion = "v2.0.8"
+                        val currentVersion = "v2.0.9"
                         if (tagName.isNotEmpty() && tagName != currentVersion) {
                             statusView?.text = "🚀 New update available: $tagName"
                             AlertDialog.Builder(this@MainActivity)
                                 .setTitle("🚀 New Version Available: $tagName")
-                                .setMessage("A new version ($tagName) is available on GitHub with the latest improvements!\n\nWould you like to download and install it?")
-                                .setPositiveButton("Download & Update") { _, _ ->
-                                    val targetUrl = apkUrl ?: "https://github.com/Ayoubvvch/pc-controller/releases/latest"
-                                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
-                                    startActivity(browserIntent)
+                                .setMessage("A new version ($tagName) is available on GitHub with the latest improvements!\n\nWould you like to download and install it now?")
+                                .setPositiveButton("🚀 Download & Install") { _, _ ->
+                                    if (apkUrl != null) {
+                                        startInAppUpdateDownload(apkUrl, tagName)
+                                    } else {
+                                        val targetUrl = "https://github.com/Ayoubvvch/pc-controller/releases/latest"
+                                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
+                                        startActivity(browserIntent)
+                                    }
                                 }
                                 .setNegativeButton("Later", null)
                                 .show()
@@ -1447,6 +1505,222 @@ class MainActivity : AppCompatActivity() {
                         statusView?.text = "❌ Error parsing update info"
                     }
                 }
+            }
+        })
+    }
+
+    private fun startInAppUpdateDownload(apkUrl: String, tagName: String) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_download_update, null)
+        val tvTitle = dialogView.findViewById<TextView>(R.id.tvDownloadTitle)
+        val tvStatus = dialogView.findViewById<TextView>(R.id.tvDownloadStatus)
+        val tvBytes = dialogView.findViewById<TextView>(R.id.tvDownloadBytes)
+        val tvPercent = dialogView.findViewById<TextView>(R.id.tvDownloadPercent)
+        val pb = dialogView.findViewById<ProgressBar>(R.id.pbDownloadProgress)
+        val btnCancel = dialogView.findViewById<TextView>(R.id.btnCancelDownload)
+
+        tvTitle.text = "📥 Downloading Update ($tagName)"
+        tvStatus.text = "Connecting to GitHub Releases..."
+
+        val downloadDialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(false)
+            .create()
+
+        downloadDialog.show()
+
+        val request = Request.Builder()
+            .url(apkUrl)
+            .header("User-Agent", "PCRemote-Android")
+            .build()
+        val downloadCall = client.newCall(request)
+
+        btnCancel.setOnClickListener {
+            downloadCall.cancel()
+            downloadDialog.dismiss()
+            Toast.makeText(this, "Download cancelled", Toast.LENGTH_SHORT).show()
+        }
+
+        downloadCall.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (call.isCanceled()) return
+                runOnUiThread {
+                    downloadDialog.dismiss()
+                    Toast.makeText(this@MainActivity, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                if (!response.isSuccessful) {
+                    runOnUiThread {
+                        downloadDialog.dismiss()
+                        Toast.makeText(this@MainActivity, "Server returned error: ${response.code}", Toast.LENGTH_LONG).show()
+                    }
+                    return
+                }
+
+                val body = response.body
+                if (body == null) {
+                    runOnUiThread {
+                        downloadDialog.dismiss()
+                        Toast.makeText(this@MainActivity, "Empty response body", Toast.LENGTH_SHORT).show()
+                    }
+                    return
+                }
+
+                val totalLength = body.contentLength()
+                val targetDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: cacheDir
+                val apkFile = File(targetDir, "PCRemote-$tagName.apk")
+
+                try {
+                    val inputStream = body.byteStream()
+                    val outputStream = FileOutputStream(apkFile)
+                    val buffer = ByteArray(8192)
+                    var bytesDownloaded = 0L
+                    var lastUpdateMs = 0L
+
+                    while (true) {
+                        val read = inputStream.read(buffer)
+                        if (read == -1) break
+                        outputStream.write(buffer, 0, read)
+                        bytesDownloaded += read
+
+                        val now = System.currentTimeMillis()
+                        if (now - lastUpdateMs > 100 || bytesDownloaded == totalLength) {
+                            lastUpdateMs = now
+                            val percent = if (totalLength > 0) ((bytesDownloaded * 100) / totalLength).toInt() else 0
+                            val downloadedStr = String.format(Locale.US, "%.1f MB", bytesDownloaded / (1024.0 * 1024.0))
+                            val totalStr = if (totalLength > 0) String.format(Locale.US, "%.1f MB", totalLength / (1024.0 * 1024.0)) else "Unknown"
+
+                            runOnUiThread {
+                                pb.isIndeterminate = totalLength <= 0
+                                if (totalLength > 0) {
+                                    pb.progress = percent
+                                    tvPercent.text = "$percent%"
+                                } else {
+                                    tvPercent.text = ""
+                                }
+                                tvStatus.text = "Downloading PCRemote-$tagName.apk..."
+                                tvBytes.text = "$downloadedStr / $totalStr"
+                            }
+                        }
+                    }
+
+                    outputStream.flush()
+                    outputStream.close()
+                    inputStream.close()
+
+                    runOnUiThread {
+                        downloadDialog.dismiss()
+                        Toast.makeText(this@MainActivity, "✅ Download complete! Starting installer...", Toast.LENGTH_SHORT).show()
+                        installDownloadedApk(apkFile)
+                    }
+                } catch (e: Exception) {
+                    if (call.isCanceled()) return
+                    runOnUiThread {
+                        downloadDialog.dismiss()
+                        Toast.makeText(this@MainActivity, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        })
+    }
+
+    private fun installDownloadedApk(apkFile: File) {
+        if (!apkFile.exists()) {
+            Toast.makeText(this, "Downloaded APK file not found", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!packageManager.canRequestPackageInstalls()) {
+                pendingApkToInstall = apkFile
+                AlertDialog.Builder(this)
+                    .setTitle("Permission Required")
+                    .setMessage("To install the new update, Android requires permission to allow install from this app.\n\nPlease enable 'Allow from this source' on the next screen.")
+                    .setPositiveButton("Settings") { _, _ ->
+                        val intent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                            data = Uri.parse("package:$packageName")
+                        }
+                        installPermissionLauncher.launch(intent)
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+                return
+            }
+        }
+
+        launchPackageInstaller(apkFile)
+    }
+
+    private fun launchPackageInstaller(apkFile: File) {
+        try {
+            val apkUri = FileProvider.getUriForFile(
+                this,
+                "${applicationContext.packageName}.provider",
+                apkFile
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Could not launch package installer: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun adjustPcVolumeDelta(delta: Int) {
+        cachedPcVolume = (cachedPcVolume + delta).coerceIn(0, 100)
+        showVolumeHud(cachedPcVolume)
+        sendVolumeUpdate(cachedPcVolume)
+    }
+
+    private fun showVolumeHud(volume: Int) {
+        val hud = findViewById<LinearLayout>(R.id.layoutVolumeHud) ?: return
+        val tvText = findViewById<TextView>(R.id.tvVolumeHudText)
+        val tvIcon = findViewById<TextView>(R.id.tvVolumeHudIcon)
+        val pb = findViewById<ProgressBar>(R.id.pbVolumeHud)
+
+        tvText?.text = "PC Volume: $volume%"
+        tvIcon?.text = if (volume == 0) "🔇" else if (volume < 30) "🔉" else "🔊"
+        pb?.progress = volume
+
+        hud.alpha = 1f
+        hud.visibility = View.VISIBLE
+
+        activeVolumeBottomSheet?.let { dialog ->
+            if (dialog.isShowing) {
+                val sb = dialog.findViewById<SeekBar>(R.id.sbBsVolume)
+                val tv = dialog.findViewById<TextView>(R.id.tvBsVolumePercent)
+                sb?.progress = volume
+                tv?.text = "$volume%"
+            }
+        }
+
+        hideHudRunnable?.let { hudHandler.removeCallbacks(it) }
+        hideHudRunnable = Runnable {
+            hud.animate().alpha(0f).setDuration(250).withEndAction {
+                hud.visibility = View.GONE
+            }.start()
+        }
+        hudHandler.postDelayed(hideHudRunnable!!, 1500)
+    }
+
+    private fun fetchCurrentPcVolume() {
+        val baseUrl = getBaseUrl()
+        val request = Request.Builder().url("$baseUrl/api/volume").get().build()
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {}
+            override fun onResponse(call: Call, response: Response) {
+                val body = response.body?.string() ?: ""
+                try {
+                    val json = JSONObject(body)
+                    val vol = json.optInt("volume", -1)
+                    if (vol >= 0) {
+                        cachedPcVolume = vol
+                    }
+                } catch (ignored: Exception) {}
             }
         })
     }

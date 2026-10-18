@@ -1032,6 +1032,25 @@ def execute_action(action_type, param=None):
                 "message": "🔊 PC audio unmuted."
             }
 
+    elif (cmd in ["+", "++", "vol+", "sound+"] or cmd.startswith("s +") or cmd.startswith("vol +") or cmd.startswith("sound +") or
+          cmd in ["-", "--", "vol-", "sound-"] or cmd.startswith("s -") or cmd.startswith("vol -") or cmd.startswith("sound -")):
+        delta = 5
+        nums = re.findall(r"\d+", cmd)
+        if nums:
+            delta = int(nums[0])
+        if "-" in cmd:
+            delta = -delta
+        cur = get_system_volume()
+        cur_int = int(cur) if cur is not None else 50
+        new_v = max(0, min(100, cur_int + delta))
+        set_system_volume(new_v)
+        return {
+            "status": "success",
+            "type": "volume",
+            "volume": new_v,
+            "message": f"🔊 PC system volume: {new_v}% ({'+' if delta >= 0 else ''}{delta}%)."
+        }
+
     elif (cmd.startswith("sound") or cmd.startswith("vol") or 
           cmd.startswith("volume") or cmd.startswith("صوت") or
           cmd.startswith("s ") or cmd == "s" or bool(re.match(r"^s\d+$", cmd))):
@@ -1518,6 +1537,15 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
 
             if "mute" in payload and payload["mute"] is True:
                 toggle_system_mute()
+            elif "delta" in payload:
+                try:
+                    delta_val = int(payload["delta"])
+                    cur = get_system_volume()
+                    cur_int = int(cur) if cur is not None else 50
+                    new_v = max(0, min(100, cur_int + delta_val))
+                    set_system_volume(new_v)
+                except Exception:
+                    pass
             elif "volume" in payload or "val" in payload:
                 new_v = payload.get("volume", payload.get("val", None))
                 if new_v is not None:

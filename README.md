@@ -1,4 +1,4 @@
-# 🎮 PC Controller (v2.0.8)
+# 🎮 PC Controller (v2.0.9)
 
 > A lightweight, blazing-fast, and secure client-server system to remotely monitor, manage, and interact with your Windows PC from an Android device over your local Wi-Fi network.
 
@@ -21,7 +21,8 @@
 │  • Direct SSH Background File Download │ <══════════════════════════════════════════════════ │  • 24/7 Watchdog Recovery Service      │
 │  • Instant Clipboard Synchronization  │                                                     │  • Absolute Persistent Power Scheduler │
 │  • Windows Win+V Clipboard History     │                 Direct Background SSH/SCP           │  • Win32 Live Clipboard Watcher        │
-│  • Persistent Background Service       │                                                     │                                        │
+│  • Phone Hardware Volume Keys for PC   │                                                     │  • Atomic Relative Volume API          │
+│  • In-App Direct APK Auto-Installer    │                                                     │                                        │
 └────────────────────────────────────────┘                                                     └────────────────────────────────────────┘
 ```
 
@@ -35,13 +36,13 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 ┌───────────────────────────────────────┐          ┌───────────────────────────────────────┐
 │           📱 For Your Phone           │          │           💻 For Your PC              │
 │                                       │          │                                       │
-│  Download: PCRemote-v2.0.8.apk        │          │  Download: pc-controller-server.zip   │
+│  Download: PCRemote-v2.0.9.apk        │          │  Download: pc-controller-server.zip   │
 │  (Directly from GitHub Releases)      │          │  (Or use the `server/` folder)        │
 └───────────────────────────────────────┘          └───────────────────────────────────────┘
 ```
 
 ### 1. 📱 Android Setup (Mobile Device)
-1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.0.8.apk`**.
+1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.0.9.apk`**.
 2. Install the APK on your Android phone.
 3. Open the app. When connected to the same Wi-Fi, it will automatically discover your PC via UDP broadcast.
 
@@ -107,15 +108,18 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 * **Notification Bar Quick Action:** Displays a persistent system notification with a direct **"📋 Send Clipboard"** button.
 * **Instant Sync from Anywhere:** Tap the notification action from any app (browser, YouTube, chats) to immediately send your copied text to your PC without opening the full app!
 
-### 🔑 9. Permanent Keystore & Seamless In-Place Updates
-* **Fixed Signing Certificate:** Built with a committed cryptographic keystore (`release.keystore`), guaranteeing identical signatures for all builds.
-* **No More Uninstalling:** Every update can be installed directly over existing versions with one click.
-* **In-App Update Checker:** Check for new releases directly from Settings with one-click download.
+### 🚀 9. In-App Direct APK Downloader & Auto-Installer
+* **One-Click In-App Update:** Tapping **"Check for App Updates"** in Settings now downloads the new APK directly inside the app with a live progress dialog showing percentage, downloaded MB, and total size.
+* **Automatic Installation Prompt:** Once the download reaches 100%, the app automatically launches the Android package installer prompt — zero browser redirects needed!
+* **Fixed Signing Certificate:** Built with a committed cryptographic keystore (`release.keystore`), guaranteeing every update can be installed directly over existing versions with one click.
 
-### 🔊 10. Real-Time Volume Control
-* Adjust master Windows audio volume using the native CoreAudio API (`vol.exe`).
-* Visual interactive volume slider in mobile chat.
-* Quick preset chips (`15%`, `25%`, `40%`, `50%`, `75%`, `100%`) and `mute` / `unmute` toggles.
+### 🔊 10. Hardware Volume Keys & Real-Time Volume HUD
+* **Control PC with Phone Side Buttons:** Pressing your phone's physical **Volume Up** or **Volume Down** buttons while inside the app directly raises or lowers your Windows PC's master volume!
+* **Floating Volume HUD:** Displays a sleek, animated on-screen volume pill with current percentage and a visual progress bar.
+* **Zero Disruption to Phone:** Consumes hardware key events so your phone's ringtone and media volume remain unaffected.
+* **Settings Toggle:** Easily toggle **"Phone Volume Keys Control PC"** on or off in Settings anytime.
+* **Native Windows CoreAudio API:** Instant, crackle-free audio level adjustments (`vol.exe`).
+* **Visual Slider & Presets:** Quick preset chips (`15%`, `25%`, `40%`, `50%`, `75%`, `100%`) and `mute` / `unmute` toggles.
 
 ### 🌧️ 11. Ambient Automations
 * `sleep rain 15m` — Launches `Rain.mp4` via mpv in fullscreen loop mode, adjusts volume to 28%, and automatically suspends the PC when the timer ends.
@@ -131,6 +135,10 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 | `clip <text>` / `copy <text>` | Copy text directly to Windows PC clipboard (`Ctrl + V`) |
 | `clip` | View current text in PC clipboard |
 | `history` / `clips` | View recent PC clipboard history items |
+| `sound <0-100>` / `s <0-100>` | Set PC master volume (e.g. `s 20`, `sound 50`) |
+| `+` / `++` / `s +<val>` | Increment PC volume (e.g. `+`, `s +5`, `vol +10`) |
+| `-` / `--` / `s -<val>` | Decrement PC volume (e.g. `-`, `s -5`, `vol -10`) |
+| `mute` / `unmute` | Toggle audio mute |
 | `screenshot` / `ss` | Capture all connected monitors combined |
 | `screenshot 1` / `ss 1` | Capture primary monitor |
 | `screenshot 2` / `ss 2` | Capture secondary monitor |
@@ -139,8 +147,6 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 | `restart <duration>` | Restart PC (immediate with confirmation or scheduled) |
 | `hibernate <duration>` | Put PC to hibernate (immediate with confirmation or scheduled) |
 | `sleep rain <duration>` | Ambient rain video + volume 28% + sleep timer |
-| `sound <0-100>` / `s <0-100>` | Set PC master volume (e.g. `s 20`, `sound 50`) |
-| `mute` / `unmute` | Toggle audio mute |
 | `lock` | Lock Windows workstation (`Win + L`) |
 | `status` | View PC health, hostname, local IP addresses, and active timers |
 | `cancel` / `stop` | Cancel active power timers and stop media player |
