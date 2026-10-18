@@ -1157,7 +1157,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     if (isLarge) {
-                        AlertDialog.Builder(this@MainActivity, R.style.Theme_AppCompat_Dialog_Alert)
+                        AlertDialog.Builder(this@MainActivity)
                             .setTitle("⚠️ Large Folder Warning")
                             .setMessage("This folder size is $sizeStr (exceeds 500 MB).\n\nTransferring large folders over SSH may take some time depending on your Wi-Fi.\n\nA live CMD terminal window will open on your PC to show real-time progress and allow stopping anytime.\n\nDo you want to proceed?")
                             .setPositiveButton("Proceed") { _, _ ->
