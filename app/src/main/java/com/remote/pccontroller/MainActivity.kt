@@ -15,6 +15,7 @@ import android.text.TextWatcher
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import androidx.core.content.FileProvider
 import android.net.Uri
 import android.os.Bundle
@@ -940,6 +941,7 @@ class MainActivity : AppCompatActivity() {
         val rvPcFiles = dialog.findViewById<RecyclerView>(R.id.rvPcFiles)
         val pbBrowserLoading = dialog.findViewById<ProgressBar>(R.id.pbBrowserLoading)
         val tvEmptyFiles = dialog.findViewById<TextView>(R.id.tvEmptyFiles)
+        val btnDownloadCurrentFolder = dialog.findViewById<ImageButton>(R.id.btnDownloadCurrentFolder)
 
         rvPcFiles.layoutManager = LinearLayoutManager(this)
 
@@ -958,7 +960,11 @@ class MainActivity : AppCompatActivity() {
                 }
             },
             onDownloadClick = { item ->
-                downloadFileFromPc(item)
+                if (item.isDirectory) {
+                    downloadFolderFromPc(item)
+                } else {
+                    downloadFileFromPc(item)
+                }
             }
         )
         rvPcFiles.adapter = fileAdapter
@@ -1022,6 +1028,7 @@ class MainActivity : AppCompatActivity() {
                                 tvCurrentPath.text = currentFolder
                                 btnBackFolder.isEnabled = !parentFolder.isNullOrEmpty()
                                 btnBackFolder.alpha = if (!parentFolder.isNullOrEmpty()) 1.0f else 0.3f
+                                btnDownloadCurrentFolder.visibility = if (!isDriveRoot(currentFolder)) View.VISIBLE else View.GONE
 
                                 fileList.clear()
                                 fileList.addAll(newItems)
@@ -1062,6 +1069,17 @@ class MainActivity : AppCompatActivity() {
                 loadFolder(parentFolder)
             }
         }
+        btnDownloadCurrentFolder.setOnClickListener {
+            if (!currentFolder.isNullOrEmpty() && !isDriveRoot(currentFolder)) {
+                val folderName = currentFolder.substringAfterLast('\\').ifEmpty { currentFolder.substringAfterLast('/') }
+                val currentFolderItem = PcFileItem(
+                    name = folderName,
+                    path = currentFolder,
+                    isDirectory = true
+                )
+                downloadFolderFromPc(currentFolderItem)
+            }
+        }
         btnCloseBrowser.setOnClickListener { dialog.dismiss() }
 
         loadFolder(null)
@@ -1089,22 +1107,171 @@ class MainActivity : AppCompatActivity() {
         return tv
     }
 
-    private fun downloadFileFromPc(item: PcFileItem) {
+    private fun isDriveRoot(path: String?): Boolean {
+        if (path.isNullOrBlank()) return true
+        val trimmed = path.trim().replace('/', '\\').trimEnd('\\')
+        return (trimmed.length <= 2 && trimmed.endsWith(":")) || trimmed == "\\" || trimmed == "/"
+    }
+
+    private fun downloadFolderFromPc(item: PcFileItem) {
+        if (isDriveRoot(item.path)) {
+            Toast.makeText(this, "❌ Transferring an entire drive root is not allowed.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         val baseUrl = getBaseUrl()
-        val phoneIp = getPhoneLocalIp() ?: ""
+        val encoded = URLEncoder.encode(item.path, "UTF-8")
+        val url = "$baseUrl/api/files/folder_info?path=$encoded"
+
+        Toast.makeText(this, "⏳ Checking folder size on PC...", Toast.LENGTH_SHORT).show()
+
+        val req = Request.Builder().url(url).build()
+        client.newCall(req).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "⚠️ Could not check folder size: ${e.message}", Toast.LENGTH_SHORT).show()
+                    showChooseDestinationDialog(item, "Folder", isLarge = false)
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val body = response.body?.string() ?: ""
+                var isLarge = false
+                var isDrive = false
+                var sizeStr = "Folder"
+                try {
+                    val json = JSONObject(body)
+                    if (json.optString("status") == "success") {
+                        isLarge = json.optBoolean("is_large", false)
+                        isDrive = json.optBoolean("is_drive", false)
+                        sizeStr = json.optString("size_str", "Folder")
+                    } else if (json.optBoolean("is_drive", false)) {
+                        isDrive = true
+                    }
+                } catch (ignored: Exception) {}
+
+                runOnUiThread {
+                    if (isDrive) {
+                        Toast.makeText(this@MainActivity, "❌ Transferring an entire drive root is not allowed.", Toast.LENGTH_SHORT).show()
+                        return@runOnUiThread
+                    }
+
+                    if (isLarge) {
+                        AlertDialog.Builder(this@MainActivity, R.style.Theme_AppCompat_Dialog_Alert)
+                            .setTitle("⚠️ Large Folder Warning")
+                            .setMessage("This folder size is $sizeStr (exceeds 500 MB).\n\nTransferring large folders over SSH may take some time depending on your Wi-Fi.\n\nA live CMD terminal window will open on your PC to show real-time progress and allow stopping anytime.\n\nDo you want to proceed?")
+                            .setPositiveButton("Proceed") { _, _ ->
+                                showChooseDestinationDialog(item, sizeStr, isLarge = true)
+                            }
+                            .setNegativeButton("Cancel", null)
+                            .show()
+                    } else {
+                        showChooseDestinationDialog(item, sizeStr, isLarge = false)
+                    }
+                }
+            }
+        })
+    }
+
+    private fun showChooseDestinationDialog(item: PcFileItem, sizeStr: String, isLarge: Boolean) {
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_choose_destination)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.92).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+
+        val tvFolderTitle = dialog.findViewById<TextView>(R.id.tvFolderTitle)
+        val tvFolderSubtitle = dialog.findViewById<TextView>(R.id.tvFolderSubtitle)
+        val layoutLargeWarning = dialog.findViewById<LinearLayout>(R.id.layoutLargeWarning)
+        val tvLargeWarningText = dialog.findViewById<TextView>(R.id.tvLargeWarningText)
+        val etTargetDestPath = dialog.findViewById<EditText>(R.id.etTargetDestPath)
+        val btnCancelTransfer = dialog.findViewById<TextView>(R.id.btnCancelTransfer)
+        val btnConfirmTransfer = dialog.findViewById<TextView>(R.id.btnConfirmTransfer)
+
+        val chipDestDownload = dialog.findViewById<TextView>(R.id.chipDestDownload)
+        val chipDestDocuments = dialog.findViewById<TextView>(R.id.chipDestDocuments)
+        val chipDestPictures = dialog.findViewById<TextView>(R.id.chipDestPictures)
+        val chipDestMovies = dialog.findViewById<TextView>(R.id.chipDestMovies)
+        val chipDestMusic = dialog.findViewById<TextView>(R.id.chipDestMusic)
+
+        tvFolderTitle.text = item.name
+        tvFolderSubtitle.text = "Size: $sizeStr • Source: ${item.path}"
+
+        if (isLarge) {
+            layoutLargeWarning.visibility = View.VISIBLE
+            tvLargeWarningText.text = "Large Folder ($sizeStr): A live CMD window will open on your PC to monitor progress or stop anytime."
+        } else {
+            layoutLargeWarning.visibility = View.GONE
+        }
+
+        fun selectChip(selectedChip: TextView, path: String) {
+            val chips = listOf(chipDestDownload, chipDestDocuments, chipDestPictures, chipDestMovies, chipDestMusic)
+            for (c in chips) {
+                if (c == selectedChip) {
+                    c.setTextColor(Color.WHITE)
+                    c.setBackgroundResource(R.drawable.bg_input)
+                } else {
+                    c.setTextColor(resources.getColor(R.color.text_secondary, null))
+                    c.setBackgroundResource(R.drawable.bg_chip)
+                }
+            }
+            etTargetDestPath.setText(path)
+            etTargetDestPath.setSelection(path.length)
+        }
+
+        chipDestDownload.setOnClickListener { selectChip(chipDestDownload, "/sdcard/Download/") }
+        chipDestDocuments.setOnClickListener { selectChip(chipDestDocuments, "/sdcard/Documents/") }
+        chipDestPictures.setOnClickListener { selectChip(chipDestPictures, "/sdcard/Pictures/") }
+        chipDestMovies.setOnClickListener { selectChip(chipDestMovies, "/sdcard/Movies/") }
+        chipDestMusic.setOnClickListener { selectChip(chipDestMusic, "/sdcard/Music/") }
+
+        btnCancelTransfer.setOnClickListener { dialog.dismiss() }
+
+        btnConfirmTransfer.setOnClickListener {
+            var destPath = etTargetDestPath.text.toString().trim()
+            if (destPath.isEmpty()) {
+                destPath = "/sdcard/Download/"
+            }
+            if (!destPath.endsWith("/")) {
+                destPath += "/"
+            }
+            dialog.dismiss()
+            startSshTransfer(item, destPath, sizeStr, isFolder = true)
+        }
+
+        dialog.show()
+    }
+
+    private fun downloadFileFromPc(item: PcFileItem) {
+        if (item.isDirectory) {
+            downloadFolderFromPc(item)
+            return
+        }
 
         val ext = item.name.substringAfterLast('.', "").lowercase()
         val isMedia = ext in listOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "svg", "raw", "dng", "mp4", "mkv", "mov", "avi", "webm", "flv", "wmv", "3gp", "m4v", "ts")
         val targetDest = if (isMedia) "/sdcard/Pictures/" else "/sdcard/Download/"
 
-        Toast.makeText(this, "🚀 Starting SSH transfer for ${item.name}...", Toast.LENGTH_SHORT).show()
+        startSshTransfer(item, targetDest, item.sizeStr, isFolder = false)
+    }
+
+    private fun startSshTransfer(item: PcFileItem, destPath: String, sizeStr: String, isFolder: Boolean) {
+        val baseUrl = getBaseUrl()
+        val phoneIp = getPhoneLocalIp() ?: ""
+
+        val typeLabel = if (isFolder) "Folder" else "File"
+        Toast.makeText(this, "🚀 Launching SSH transfer on PC for ${item.name}...", Toast.LENGTH_SHORT).show()
 
         val jsonPayload = JSONObject().apply {
             put("path", item.path)
             put("name", item.name)
-            put("size", item.sizeStr)
+            put("size", sizeStr)
             put("phone_ip", phoneIp)
-            put("dest", targetDest)
+            put("dest", destPath)
+            put("is_folder", isFolder)
         }.toString()
 
         val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -1116,40 +1283,50 @@ class MainActivity : AppCompatActivity() {
         client.newCall(req).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 runOnUiThread {
-                    Toast.makeText(this@MainActivity, "⚠️ SSH transfer failed, falling back to direct download...", Toast.LENGTH_SHORT).show()
-                    downloadFileHttpFallback(item)
+                    if (!isFolder) {
+                        Toast.makeText(this@MainActivity, "⚠️ SSH transfer failed, falling back to direct download...", Toast.LENGTH_SHORT).show()
+                        downloadFileHttpFallback(item)
+                    } else {
+                        Toast.makeText(this@MainActivity, "❌ Failed to reach PC server: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
 
             override fun onResponse(call: Call, response: Response) {
                 val body = response.body?.string() ?: ""
-                var message = "🚀 Starting SSH transfer for ${item.name} to phone in background!"
+                var message = "🚀 SSH transfer launched on PC for ${item.name}!"
                 var isSuccess = response.isSuccessful
-                var resolvedDest = targetDest
+                var resolvedDest = destPath
                 try {
                     val json = JSONObject(body)
                     if (json.optString("status") == "success") {
                         isSuccess = true
                         message = json.optString("message", message)
-                        resolvedDest = json.optString("dest", targetDest)
+                        resolvedDest = json.optString("dest", destPath)
                     } else {
                         isSuccess = false
+                        message = json.optString("message", "Transfer failed")
                     }
                 } catch (ignored: Exception) {}
 
                 runOnUiThread {
                     if (isSuccess) {
-                        Toast.makeText(this@MainActivity, "🚀 SSH transfer started to $resolvedDest!", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@MainActivity, "🖥️ CMD transfer started on PC to $resolvedDest!", Toast.LENGTH_LONG).show()
                         addPcMessage(
-                            "🚀 File transfer started via SSH in background!\n" +
-                            "📁 File: ${item.name}\n" +
-                            "💾 Size: ${item.sizeStr}\n" +
-                            "📍 Destination: $resolvedDest\n" +
-                            "🛡️ Transferred via SSH in background; you can safely close the app or lock your screen without interruption."
+                            "🚀 SSH $typeLabel transfer started on PC!\n" +
+                            "📁 Item: ${item.name}\n" +
+                            "💾 Size: $sizeStr\n" +
+                            "📍 Destination on phone: $resolvedDest\n" +
+                            "⚡ Overwrite Mode: Matching files at destination are replaced.\n" +
+                            "🖥️ A live CMD terminal window has opened on your PC showing real-time progress. You can monitor or cancel it from your PC anytime."
                         )
                     } else {
-                        Toast.makeText(this@MainActivity, "⚠️ SSH transfer failed, falling back to direct download...", Toast.LENGTH_SHORT).show()
-                        downloadFileHttpFallback(item)
+                        if (!isFolder) {
+                            Toast.makeText(this@MainActivity, "⚠️ SSH transfer failed, falling back to direct download...", Toast.LENGTH_SHORT).show()
+                            downloadFileHttpFallback(item)
+                        } else {
+                            Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+                        }
                     }
                 }
             }
@@ -1478,7 +1655,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     runOnUiThread {
-                        val currentVersion = "v2.0.9"
+                        val currentVersion = "v2.1.0"
                         if (tagName.isNotEmpty() && tagName != currentVersion) {
                             statusView?.text = "🚀 New update available: $tagName"
                             AlertDialog.Builder(this@MainActivity)

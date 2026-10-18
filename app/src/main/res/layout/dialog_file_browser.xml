@@ -55,6 +55,18 @@
         </LinearLayout>
 
         <ImageButton
+            android:id="@+id/btnDownloadCurrentFolder"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/bg_chip"
+            android:contentDescription="Download Current Folder to Phone"
+            android:padding="9dp"
+            android:src="@drawable/ic_download"
+            android:visibility="gone"
+            app:tint="@color/accent" />
+
+        <ImageButton
             android:id="@+id/btnCloseBrowser"
             android:layout_width="40dp"
             android:layout_height="40dp"

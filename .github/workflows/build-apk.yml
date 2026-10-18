@@ -31,7 +31,7 @@ jobs:
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Rename APK for release
-        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.0.9.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.1.0.apk
 
       - name: Package Windows Server Bundle
         run: |
@@ -41,7 +41,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PCRemote-APK
-          path: PCRemote-v2.0.9.apk
+          path: PCRemote-v2.1.0.apk
 
       - name: Upload Server Artifact
         uses: actions/upload-artifact@v4
@@ -53,30 +53,32 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         with:
-          tag_name: v2.0.9
-          name: "PC Remote v2.0.9"
+          tag_name: v2.1.0
+          name: "PC Remote v2.1.0"
           body: |
-            ### 🚀 PC Remote Control (Release v2.0.9)
+            ### 🚀 PC Remote Control (Release v2.1.0)
 
             #### 📦 Downloads
-            * **📱 For Android Phones:** Download **`PCRemote-v2.0.9.apk`** below and install on your phone.
+            * **📱 For Android Phones:** Download **`PCRemote-v2.1.0.apk`** below and install on your phone.
             * **💻 For Windows PCs:** Download **`pc-controller-server-windows.zip`** below, extract anywhere, and double-click **`start.bat`**.
 
             ---
 
-            #### ✨ What's New in v2.0.9:
-            * 🔊 **Hardware Volume Buttons Control PC:**
-              * Use your phone's physical side buttons (Volume Up / Down) to directly adjust your Windows PC master volume while inside the app!
-              * Sleek animated on-screen Volume HUD showing the current PC volume level and progress bar.
-              * Consumes hardware key events so your phone's ringtone and media volume remain unaffected.
-              * Settings toggle: "Phone Volume Keys Control PC" (enabled by default).
-            * 🚀 **In-App Direct Download & Auto-Install:**
-              * Checking for updates in Settings now downloads the new APK directly inside the app with a live progress dialog showing percentage and MB.
-              * Automatically prompts the Android package installer when the download completes — no browser redirects needed!
-            * ⚡ **Atomic Relative Volume API:**
-              * Server `/api/volume` now supports atomic relative volume adjustments (`delta`), plus chat commands `+`, `-`, `s +5`, `s -5`.
+            #### ✨ What's New in v2.1.0:
+            * 📁 **High-Speed SSH Folder Transfers with Overwrite Mode:**
+              * Transfer entire folders directly from PC to phone via SSH at full Wi-Fi LAN speed.
+              * **Automatic Overwrite Mode:** Existing matching files in the target directory on your phone are replaced (not skipped).
+              * **Phone Destination Picker:** Choose where to unpack/save on your phone (`Download`, `Documents`, `Pictures`, `Movies`, `Music`, or custom path).
+              * **Drive Root Protection:** Drive roots (e.g. `C:\`, `D:\`) are strictly shielded and blocked from accidental bulk transfer.
+              * **Safe Folder Sizing (> 500 MB Warning):** Non-blocking, fast recursive scan with symlink/junction loop avoidance alerts the user before transferring folders larger than 500 MB.
+            * 🖥️ **Live Dedicated PC Console Window:**
+              * When a transfer begins, a real, visible Command Prompt terminal opens on your PC displaying live OpenSSH progress, transfer speed, and ETA.
+              * **PC Stop & Control:** Press `Ctrl+C` or close the CMD window from your PC anytime to cancel the transfer immediately.
+              * Leaves the phone app completely unburdened and free — you can lock your screen or close the app safely.
+            * 📥 **"Download Current Folder" Action in File Browser:**
+              * Convenient one-tap button in the top action bar of the PC File Browser to transfer the currently viewed folder.
           files: |
-            PCRemote-v2.0.9.apk
+            PCRemote-v2.1.0.apk
             pc-controller-server-windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -25,11 +25,14 @@ class PcFileAdapter(
         if (item.isDirectory) {
             holder.tvFileIcon.text = "📁"
             holder.tvFileDetails.text = "Folder"
-            holder.btnDownload.visibility = View.GONE
+            val isDrive = isDrivePath(item.path)
+            holder.btnDownload.visibility = if (isDrive) View.GONE else View.VISIBLE
+            holder.btnDownload.contentDescription = "Transfer folder to phone"
         } else {
             holder.tvFileIcon.text = getFileIcon(item.ext)
             holder.tvFileDetails.text = item.sizeStr
             holder.btnDownload.visibility = View.VISIBLE
+            holder.btnDownload.contentDescription = "Transfer file to phone"
         }
 
         holder.itemView.setOnClickListener {
@@ -39,6 +42,12 @@ class PcFileAdapter(
         holder.btnDownload.setOnClickListener {
             onDownloadClick(item)
         }
+    }
+
+    private fun isDrivePath(path: String?): Boolean {
+        if (path.isNullOrBlank()) return true
+        val trimmed = path.trim().replace('/', '\\').trimEnd('\\')
+        return (trimmed.length <= 2 && trimmed.endsWith(":")) || trimmed == "\\" || trimmed == "/"
     }
 
     override fun getItemCount(): Int = items.size

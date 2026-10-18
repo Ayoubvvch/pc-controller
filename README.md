@@ -1,4 +1,4 @@
-# 🎮 PC Controller (v2.0.9)
+# 🎮 PC Controller (v2.1.0)
 
 > A lightweight, blazing-fast, and secure client-server system to remotely monitor, manage, and interact with your Windows PC from an Android device over your local Wi-Fi network.
 
@@ -19,10 +19,10 @@
 │  • Zero-Config UDP Auto-Discovery      │                UDP Broadcast (Port 5051)            │  • Compiled C# Multi-Monitor Engine    │
 │  • Pinch-to-Zoom Screenshot Preview    │                                                     │  • Windows CoreAudio Native API        │
 │  • Direct SSH Background File Download │ <══════════════════════════════════════════════════ │  • 24/7 Watchdog Recovery Service      │
-│  • Instant Clipboard Synchronization  │                                                     │  • Absolute Persistent Power Scheduler │
+│  • Full Folder SSH Transfer (Overwrite)│                                                     │  • Absolute Persistent Power Scheduler │
 │  • Windows Win+V Clipboard History     │                 Direct Background SSH/SCP           │  • Win32 Live Clipboard Watcher        │
 │  • Phone Hardware Volume Keys for PC   │                                                     │  • Atomic Relative Volume API          │
-│  • In-App Direct APK Auto-Installer    │                                                     │                                        │
+│  • In-App Direct APK Auto-Installer    │                                                     │  • Live Visible CMD Console Transfer   │
 └────────────────────────────────────────┘                                                     └────────────────────────────────────────┘
 ```
 
@@ -36,13 +36,13 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 ┌───────────────────────────────────────┐          ┌───────────────────────────────────────┐
 │           📱 For Your Phone           │          │           💻 For Your PC              │
 │                                       │          │                                       │
-│  Download: PCRemote-v2.0.9.apk        │          │  Download: pc-controller-server.zip   │
+│  Download: PCRemote-v2.1.0.apk        │          │  Download: pc-controller-server.zip   │
 │  (Directly from GitHub Releases)      │          │  (Or use the `server/` folder)        │
 └───────────────────────────────────────┘          └───────────────────────────────────────┘
 ```
 
 ### 1. 📱 Android Setup (Mobile Device)
-1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.0.9.apk`**.
+1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.1.0.apk`**.
 2. Install the APK on your Android phone.
 3. Open the app. When connected to the same Wi-Fi, it will automatically discover your PC via UDP broadcast.
 
@@ -72,15 +72,21 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
   * `screenshot 2` — Captures secondary display.
 * Fullscreen preview modal in mobile app with **Pinch-to-Zoom** (`ZoomTouchListener`), one-tap Save to Gallery, and native Share Sheet integration.
 
-### 📂 3. Smart Remote File Explorer & Download
+### 📂 3. Smart Remote File Explorer & High-Speed SSH Transfers
 * Browse drives (`C:`, `D:`) and quick folders (Downloads, Desktop, Documents).
 * **Sorted by Newest First:** Newly created and downloaded files always appear right at the top.
-* **Direct SSH/SCP Background Push:**
-  * Files are pushed directly to your phone via SSH in the background.
-  * You can lock your phone or close the app safely while large files continue transferring uninterrupted.
-* **Smart Media Routing:**
-  * Photos and videos (`.jpg`, `.png`, `.mp4`, `.mkv`, etc.) are automatically saved to `/sdcard/Pictures/`.
-  * Documents, archives, and other files are routed to `/sdcard/Download/`.
+* **📁 Full Folder Transfers with Automatic Overwrite:**
+  * Transfer entire directories from PC to phone in one tap with zero third-party tools.
+  * **Overwrite Mode Enabled:** Existing matching files in the target directory on your phone are cleanly replaced (never skipped).
+  * **Phone Destination Picker:** Easily choose where the folder lands (`Download`, `Documents`, `Pictures`, `Movies`, `Music`, or any custom phone path).
+  * **Shielded Drive Roots:** Drive roots (`C:\`, `D:\`) are strictly protected and cannot be transferred in bulk.
+  * **Safe Size Pre-Scan (> 500 MB Warning):** Non-blocking recursive scanner detects large directories without following symlink/junction loops, warning the user beforehand.
+  * **Download Current Folder Button:** Handy action button in the file browser top bar to download whatever folder you're currently viewing.
+* **🖥️ Dedicated Live CMD Console on PC:**
+  * Starting any SSH file or folder transfer automatically opens a clean, visible Command Prompt terminal on your PC.
+  * Displays live OpenSSH transfer progress, file names, speed (MB/s), and ETA.
+  * **Immediate Control & Cancellation:** Press `Ctrl+C` or close the CMD window from your PC anytime to cancel the transfer immediately.
+  * Completely unburdens your phone: you can lock your screen or close the app safely while the transfer continues in the background.
 
 ### 📤 4. Seamless Mobile-to-PC Sharing
 * **Chat Attachment (`📎`):** Tap the clip icon in chat to pick and send any photo, video, or document straight to your PC's `Downloads` folder.

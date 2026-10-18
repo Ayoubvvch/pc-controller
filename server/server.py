@@ -16,6 +16,8 @@ import socket
 import urllib.parse
 import re
 import base64
+import tempfile
+import uuid
 from datetime import datetime, timedelta
 
 # Ensure safe stdout/stderr on Windows (especially when run via pythonw.exe)
@@ -582,6 +584,73 @@ def take_screenshot(screen_target="all"):
             "status": "error",
             "message": f"❌ Error during screen capture: {str(e)}"
         }
+
+def is_drive_root(path):
+    """Returns True if path is a drive root (e.g. C:\\ or D:) or empty."""
+    if not path or not str(path).strip():
+        return True
+    norm = os.path.normpath(str(path)).rstrip("\\/")
+    return (len(norm) <= 2 and norm.endswith(":")) or norm in ["\\", "/"]
+
+def check_folder_size_safe(folder_path, max_scan_bytes=524288000, max_scan_files=20000):
+    """
+    Safely calculates folder size without following junctions or symlinks.
+    Early breaks if size exceeds 500 MB (524,288,000 bytes) or 20,000 files to avoid locking CPU/disk.
+    """
+    if not folder_path or not os.path.exists(folder_path):
+        return {"status": "error", "message": "Path does not exist"}
+    if not os.path.isdir(folder_path):
+        return {"status": "error", "message": "Path is not a folder"}
+
+    if is_drive_root(folder_path):
+        return {
+            "status": "error",
+            "is_drive": True,
+            "message": "❌ Transferring an entire drive root is not allowed."
+        }
+
+    total_size = 0
+    file_count = 0
+    is_large = False
+
+    try:
+        for root, dirs, files in os.walk(folder_path, followlinks=False):
+            # Exclude Windows system folders and reparse points/junctions
+            dirs[:] = [d for d in dirs if not d.startswith('$') and d not in ["System Volume Information", "$RECYCLE.BIN"]]
+            for f in files:
+                if f.startswith('$'):
+                    continue
+                file_full = os.path.join(root, f)
+                try:
+                    if not os.path.islink(file_full):
+                        total_size += os.path.getsize(file_full)
+                        file_count += 1
+                        if total_size >= max_scan_bytes:
+                            is_large = True
+                            break
+                except (OSError, PermissionError):
+                    pass
+            if is_large or file_count >= max_scan_files:
+                is_large = True
+                break
+    except Exception as e:
+        print(f"[FOLDER_SIZE] Error scanning {folder_path}: {e}")
+
+    folder_name = os.path.basename(os.path.normpath(folder_path)) or "Folder"
+    size_str = format_size(total_size)
+    if is_large:
+        size_str = f"> {size_str}"
+
+    return {
+        "status": "success",
+        "name": folder_name,
+        "path": folder_path,
+        "size_bytes": total_size,
+        "size_str": size_str,
+        "is_large": is_large,
+        "is_drive": False,
+        "file_count": file_count
+    }
 
 def browse_path(target_path=None):
     """Browses a directory on PC and returns folders, files, drives, and shortcuts."""
@@ -1252,6 +1321,19 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+        elif parsed.path in ["/api/files/folder_info", "/api/folder_info"]:
+            params = urllib.parse.parse_qs(parsed.query)
+            target_path = params.get("path", [""])[0]
+            data = check_folder_size_safe(target_path)
+            if not data:
+                data = {"status": "error", "message": "Folder does not exist"}
+            body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
         elif parsed.path in ["/api/download", "/download"]:
             params = urllib.parse.parse_qs(parsed.query)
             file_path = params.get("path", [""])[0] or params.get("file", [""])[0]
@@ -1585,9 +1667,10 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
             file_path = payload.get("path", "")
             raw_dest = payload.get("dest", "")
             phone_ip = payload.get("phone_ip", "") or self.client_address[0]
+            is_folder = payload.get("is_folder", False) or os.path.isdir(file_path)
 
             if not file_path or not os.path.exists(file_path):
-                resp = {"status": "error", "message": "❌ Requested file does not exist on PC"}
+                resp = {"status": "error", "message": "❌ Requested path does not exist on PC"}
                 body = json.dumps(resp, ensure_ascii=False).encode("utf-8")
                 self.send_response(400)
                 self._send_cors_headers()
@@ -1597,57 +1680,128 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(body)
                 return
 
-            filename = os.path.basename(file_path)
-            size_bytes = os.path.getsize(file_path)
-            size_str = format_size(size_bytes)
+            if is_drive_root(file_path):
+                resp = {"status": "error", "message": "❌ Transferring an entire drive root is not allowed."}
+                body = json.dumps(resp, ensure_ascii=False).encode("utf-8")
+                self.send_response(400)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
 
-            ext = os.path.splitext(filename)[1].lower()
-            MEDIA_EXTENSIONS = {
-                '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.heic', '.heif', '.svg', '.raw', '.dng',
-                '.mp4', '.mkv', '.mov', '.avi', '.webm', '.flv', '.wmv', '.3gp', '.m4v', '.ts'
-            }
-            if ext in MEDIA_EXTENSIONS:
-                dest_dir = "/sdcard/Pictures/"
-            elif raw_dest:
-                dest_dir = raw_dest
+            item_name = os.path.basename(os.path.normpath(file_path)) or ("Folder" if is_folder else "File")
+            if is_folder:
+                sz_info = check_folder_size_safe(file_path)
+                size_str = sz_info.get("size_str", "Folder") if sz_info else "Folder"
             else:
-                dest_dir = "/sdcard/Download/"
-
-            def scp_worker(src, dst_dir, target_ip, fname, sz_str):
-                key_path = os.path.expanduser(r"~/.ssh/id_ed25519")
-                target = f"root@{target_ip}:{dst_dir}"
-                print(f"[SSH] Starting background transfer: '{fname}' ({sz_str}) -> {target}")
                 try:
-                    cmd = ['scp', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=no']
-                    if os.path.exists(key_path):
-                        cmd.extend(['-i', key_path])
-                    cmd.extend([src, target])
-                    res = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
-                    if res.returncode == 0:
-                        print(f"[SSH] ✅ Transfer finished successfully: '{fname}' to {target}")
-                    else:
-                        print(f"[SSH] Direct IP transfer failed ({res.stderr.strip()}), falling back to 'phone' host...")
-                        cmd_phone = ['scp', '-o', 'BatchMode=yes', src, f"phone:{dst_dir}"]
-                        res2 = subprocess.run(cmd_phone, capture_output=True, text=True, timeout=1800)
-                        if res2.returncode == 0:
-                            print(f"[SSH] ✅ Transfer finished successfully via 'phone' host: '{fname}'")
-                        else:
-                            print(f"[SSH] ❌ Transfer failed: {res2.stderr.strip()}")
-                except Exception as e:
-                    print(f"[SSH] ❌ Exception during transfer: {e}")
+                    size_bytes = os.path.getsize(file_path)
+                    size_str = format_size(size_bytes)
+                except Exception:
+                    size_str = "File"
 
-            t = threading.Thread(
-                target=scp_worker,
-                args=(file_path, dest_dir, phone_ip, filename, size_str),
-                daemon=True,
-                name=f"SCP-{filename}"
-            )
-            t.start()
+            if raw_dest and str(raw_dest).strip():
+                dest_dir = str(raw_dest).strip()
+            else:
+                if not is_folder:
+                    ext = os.path.splitext(item_name)[1].lower()
+                    MEDIA_EXTENSIONS = {
+                        '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.heic', '.heif', '.svg', '.raw', '.dng',
+                        '.mp4', '.mkv', '.mov', '.avi', '.webm', '.flv', '.wmv', '.3gp', '.m4v', '.ts'
+                    }
+                    dest_dir = "/sdcard/Pictures/" if ext in MEDIA_EXTENSIONS else "/sdcard/Download/"
+                else:
+                    dest_dir = "/sdcard/Download/"
 
+            if not dest_dir.endswith("/"):
+                dest_dir += "/"
+
+            bat_dir = os.path.join(tempfile.gettempdir(), "pcremote_transfers")
+            os.makedirs(bat_dir, exist_ok=True)
+            try:
+                existing_bats = [os.path.join(bat_dir, f) for f in os.listdir(bat_dir) if f.endswith(".bat")]
+                if len(existing_bats) > 20:
+                    existing_bats.sort(key=os.path.getmtime)
+                    for old_b in existing_bats[:-20]:
+                        try:
+                            os.remove(old_b)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            bat_path = os.path.join(bat_dir, f"transfer_{int(time.time())}_{uuid.uuid4().hex[:6]}.bat")
+            key_path = os.path.expanduser(r"~/.ssh/id_ed25519")
+            key_arg = f'-i "{key_path}" ' if os.path.exists(key_path) else ''
+            r_flag = "-r " if is_folder else ""
+            escaped_src = os.path.normpath(file_path)
+
+            bat_content = f"""@echo off
+chcp 65001 >nul
+title PC Remote: SSH Transfer - {item_name}
+color 0B
+cls
+echo ================================================================
+echo   PC Remote - High-Speed SSH Transfer
+echo ================================================================
+echo   Item:        {item_name} {"(Folder)" if is_folder else "(File)"}
+echo   Size:        {size_str}
+echo   Source:      {escaped_src}
+echo   Destination: root@{phone_ip}:{dest_dir}
+echo   Mode:        Overwrite matching files (Replace)
+echo ================================================================
+echo.
+echo [INFO] Transfer in progress... Press Ctrl+C or close this window to cancel.
+echo.
+
+ssh -o BatchMode=yes -o StrictHostKeyChecking=no {key_arg}root@{phone_ip} "mkdir -p '{dest_dir}'" >nul 2>&1
+scp {r_flag}-o BatchMode=yes -o StrictHostKeyChecking=no {key_arg}"{escaped_src}" root@{phone_ip}:"{dest_dir}"
+if %ERRORLEVEL% equ 0 goto SUCCESS
+
+echo.
+echo [WARN] Direct IP transfer failed, attempting fallback to SSH host 'phone'...
+ssh -o BatchMode=yes -o StrictHostKeyChecking=no phone "mkdir -p '{dest_dir}'" >nul 2>&1
+scp {r_flag}-o BatchMode=yes -o StrictHostKeyChecking=no "{escaped_src}" phone:"{dest_dir}"
+if %ERRORLEVEL% equ 0 goto SUCCESS
+
+goto FAILURE
+
+:SUCCESS
+echo.
+echo ================================================================
+echo   [SUCCESS] Transfer completed successfully!
+echo   All matching files have been overwritten at destination.
+echo ================================================================
+echo Window will close in 8 seconds (or press any key to close now)...
+timeout /t 8
+exit
+
+:FAILURE
+echo.
+echo ================================================================
+echo   [FAILED] Transfer was stopped, cancelled, or encountered an error.
+echo ================================================================
+pause
+"""
+            with open(bat_path, "w", encoding="utf-8") as f:
+                f.write(bat_content)
+
+            try:
+                subprocess.Popen(
+                    ["cmd.exe", "/c", "start", "", bat_path],
+                    creationflags=subprocess.CREATE_NEW_CONSOLE
+                )
+                print(f"[SSH] Launched visible CMD transfer: '{item_name}' ({size_str}) -> {dest_dir}")
+            except Exception as pe:
+                print(f"[SSH] Error spawning CMD: {pe}")
+
+            item_type_str = "Folder" if is_folder else "File"
             resp = {
                 "status": "success",
-                "message": f"🚀 Starting background transfer via SSH to phone!\n📁 File: {filename} ({size_str})\n📍 Destination: {dest_dir}",
-                "filename": filename,
+                "message": f"🚀 SSH {item_type_str} transfer launched on PC!\n📁 Item: {item_name}\n💾 Size: {size_str}\n📍 Destination: {dest_dir}\n⚡ Overwrite Mode: Matching files at destination are replaced.\n🖥️ A live CMD terminal window has opened on your PC showing real-time progress. You can monitor or cancel it from your PC anytime.",
+                "filename": item_name,
                 "size": size_str,
                 "dest": dest_dir
             }
