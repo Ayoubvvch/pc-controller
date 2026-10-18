@@ -15,3 +15,5 @@ __pycache__/
 screenshots/
 server/screenshots/
 *.apk
+server/clipboard_history.json
+server/power_timer.json

@@ -9,6 +9,7 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.appcompat.widget.SwitchCompat
+import androidx.appcompat.widget.PopupMenu
 import android.text.Editable
 import android.text.TextWatcher
 import android.graphics.Bitmap
@@ -83,6 +84,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnBrowseFiles: ImageButton
     private lateinit var btnSettings: ImageButton
     private lateinit var btnRefresh: ImageButton
+    private lateinit var btnMore: ImageButton
     private lateinit var tvConnectionStatus: TextView
 
     private val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
@@ -122,6 +124,7 @@ class MainActivity : AppCompatActivity() {
         btnBrowseFiles = findViewById(R.id.btnBrowseFiles)
         btnSettings = findViewById(R.id.btnSettings)
         btnRefresh = findViewById(R.id.btnRefresh)
+        btnMore = findViewById(R.id.btnMore)
         tvConnectionStatus = findViewById(R.id.tvConnectionStatus)
 
         // Setup RecyclerView
@@ -179,6 +182,7 @@ class MainActivity : AppCompatActivity() {
 
         btnSettings.setOnClickListener { showSettingsDialog() }
         btnRefresh.setOnClickListener { checkConnection(autoDiscoverOnFail = true) }
+        btnMore.setOnClickListener { v -> showMoreMenu(v) }
         tvConnectionStatus.setOnClickListener { checkConnection(autoDiscoverOnFail = true) }
 
         // Setup Quick Action Chips
@@ -247,6 +251,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupQuickChips() {
+        findViewById<TextView>(R.id.chipClipboardHistory)?.setOnClickListener { showClipboardHistoryDialog() }
         findViewById<TextView>(R.id.chipBrowseFiles)?.setOnClickListener { showFileBrowserDialog() }
         findViewById<TextView>(R.id.chipClipboard)?.setOnClickListener { showPasteToPcDialog() }
         findViewById<TextView>(R.id.chipScreenshotAll)?.setOnClickListener { sendCommand("screenshot all") }
@@ -1419,7 +1424,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     runOnUiThread {
-                        val currentVersion = "v2.0.7"
+                        val currentVersion = "v2.0.8"
                         if (tagName.isNotEmpty() && tagName != currentVersion) {
                             statusView?.text = "🚀 New update available: $tagName"
                             AlertDialog.Builder(this@MainActivity)
@@ -1588,5 +1593,237 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
+    }
+
+    private fun showMoreMenu(anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add(0, 1, 0, "📋 PC Clipboard (Win + V)")
+        popup.menu.add(0, 2, 1, "📁 Browse PC Files")
+        popup.menu.add(0, 3, 2, "⚙️ Settings & Updates")
+        popup.menu.add(0, 4, 3, "🔄 Refresh Connection")
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> {
+                    showClipboardHistoryDialog()
+                    true
+                }
+                2 -> {
+                    showFileBrowserDialog()
+                    true
+                }
+                3 -> {
+                    showSettingsDialog()
+                    true
+                }
+                4 -> {
+                    checkConnection(autoDiscoverOnFail = true)
+                    true
+                }
+                else -> false
+            }
+        }
+        popup.show()
+    }
+
+    private fun showClipboardHistoryDialog() {
+        val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_clipboard_history)
+
+        val btnRefreshHistory = dialog.findViewById<ImageButton>(R.id.btnRefreshHistory)
+        val btnClearHistory = dialog.findViewById<ImageButton>(R.id.btnClearHistory)
+        val btnCloseHistory = dialog.findViewById<ImageButton>(R.id.btnCloseHistory)
+        val btnCloseHistoryBottom = dialog.findViewById<TextView>(R.id.btnCloseHistoryBottom)
+        val btnQuickPasteToPc = dialog.findViewById<TextView>(R.id.btnQuickPasteToPc)
+        val etSearchHistory = dialog.findViewById<EditText>(R.id.etSearchHistory)
+        val tvHistoryCount = dialog.findViewById<TextView>(R.id.tvHistoryCount)
+        val pbHistoryLoading = dialog.findViewById<ProgressBar>(R.id.pbHistoryLoading)
+        val tvEmptyHistory = dialog.findViewById<TextView>(R.id.tvEmptyHistory)
+        val rvClipboardHistory = dialog.findViewById<RecyclerView>(R.id.rvClipboardHistory)
+
+        rvClipboardHistory.layoutManager = LinearLayoutManager(this)
+
+        var allItems = listOf<PcClipboardHistoryItem>()
+
+        val adapter = ClipboardHistoryAdapter(
+            items = emptyList(),
+            onCopyPhone = { item ->
+                val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                val clip = android.content.ClipData.newPlainText("PC Clipboard", item.text)
+                clipboardManager?.setPrimaryClip(clip)
+                Toast.makeText(this, "📋 Copied to phone clipboard!", Toast.LENGTH_SHORT).show()
+            },
+            onSetPc = { item ->
+                sendClipboardToPc(item.text)
+                Toast.makeText(this, "💻 Activated on PC clipboard!", Toast.LENGTH_SHORT).show()
+            }
+        )
+        rvClipboardHistory.adapter = adapter
+
+        fun applyFilter(query: String) {
+            val q = query.trim().lowercase()
+            val filtered = if (q.isEmpty()) {
+                allItems
+            } else {
+                allItems.filter { it.text.lowercase().contains(q) }
+            }
+            adapter.updateList(filtered)
+            tvHistoryCount.text = "${filtered.size} item${if (filtered.size == 1) "" else "s"}"
+            if (filtered.isEmpty()) {
+                tvEmptyHistory.visibility = View.VISIBLE
+                if (allItems.isEmpty()) {
+                    tvEmptyHistory.text = "📋 No PC clipboard history yet.\n\nItems copied on your PC (or sent from this phone) will automatically appear here!"
+                } else {
+                    tvEmptyHistory.text = "🔍 No clipboard items matched \"$query\""
+                }
+            } else {
+                tvEmptyHistory.visibility = View.GONE
+            }
+        }
+
+        fun loadHistory() {
+            pbHistoryLoading.visibility = View.VISIBLE
+            tvEmptyHistory.visibility = View.GONE
+            val baseUrl = getBaseUrl()
+
+            val request = Request.Builder()
+                .url("$baseUrl/api/clipboard/history")
+                .get()
+                .build()
+
+            client.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    runOnUiThread {
+                        pbHistoryLoading.visibility = View.GONE
+                        tvEmptyHistory.visibility = View.VISIBLE
+                        tvEmptyHistory.text = "❌ Failed to connect to PC.\nMake sure the server is running."
+                        Toast.makeText(this@MainActivity, "Failed to load clipboard history", Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    val body = response.body?.string() ?: ""
+                    val list = mutableListOf<PcClipboardHistoryItem>()
+                    try {
+                        val json = JSONObject(body)
+                        val historyArr = json.optJSONArray("history") ?: JSONArray()
+                        for (i in 0 until historyArr.length()) {
+                            val obj = historyArr.getJSONObject(i)
+                            list.add(
+                                PcClipboardHistoryItem(
+                                    text = obj.optString("text", ""),
+                                    time = obj.optString("time", ""),
+                                    timestamp = obj.optDouble("timestamp", 0.0),
+                                    length = obj.optInt("len", 0)
+                                )
+                            )
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+
+                    runOnUiThread {
+                        pbHistoryLoading.visibility = View.GONE
+                        allItems = list
+                        applyFilter(etSearchHistory.text?.toString() ?: "")
+                    }
+                }
+            })
+        }
+
+        etSearchHistory.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                applyFilter(s?.toString() ?: "")
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+        btnRefreshHistory.setOnClickListener { loadHistory() }
+
+        btnClearHistory.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("Clear PC Clipboard History")
+                .setMessage("Are you sure you want to delete all saved PC clipboard history?")
+                .setPositiveButton("Clear All") { _, _ ->
+                    val baseUrl = getBaseUrl()
+                    val emptyBody = "".toRequestBody("application/json".toMediaTypeOrNull())
+                    val clearReq = Request.Builder()
+                        .url("$baseUrl/api/clipboard/clear")
+                        .post(emptyBody)
+                        .build()
+                    client.newCall(clearReq).enqueue(object : Callback {
+                        override fun onFailure(call: Call, e: IOException) {
+                            runOnUiThread {
+                                Toast.makeText(this@MainActivity, "Failed to clear history", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        override fun onResponse(call: Call, response: Response) {
+                            runOnUiThread {
+                                Toast.makeText(this@MainActivity, "🗑️ Clipboard history cleared", Toast.LENGTH_SHORT).show()
+                                loadHistory()
+                            }
+                        }
+                    })
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
+        btnQuickPasteToPc.setOnClickListener {
+            showPasteToPcDialog()
+        }
+
+        btnCloseHistory.setOnClickListener { dialog.dismiss() }
+        btnCloseHistoryBottom.setOnClickListener { dialog.dismiss() }
+
+        dialog.show()
+        loadHistory()
+    }
+}
+
+data class PcClipboardHistoryItem(
+    val text: String,
+    val time: String,
+    val timestamp: Double,
+    val length: Int
+)
+
+class ClipboardHistoryAdapter(
+    private var items: List<PcClipboardHistoryItem>,
+    private val onCopyPhone: (PcClipboardHistoryItem) -> Unit,
+    private val onSetPc: (PcClipboardHistoryItem) -> Unit
+) : RecyclerView.Adapter<ClipboardHistoryAdapter.ViewHolder>() {
+
+    class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val tvTime: TextView = view.findViewById(R.id.tvItemTime)
+        val tvLength: TextView = view.findViewById(R.id.tvItemLength)
+        val tvContent: TextView = view.findViewById(R.id.tvItemContent)
+        val btnCopyPhone: TextView = view.findViewById(R.id.btnItemCopyPhone)
+        val btnSetPc: TextView = view.findViewById(R.id.btnItemSetPc)
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_clipboard_history, parent, false)
+        return ViewHolder(view)
+    }
+
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+        val item = items[position]
+        holder.tvTime.text = if (item.time.isNotBlank()) "🕒 ${item.time}" else "🕒 Just now"
+        val chars = if (item.length > 0) item.length else item.text.length
+        holder.tvLength.text = "• $chars chars"
+        holder.tvContent.text = item.text
+
+        holder.btnCopyPhone.setOnClickListener { onCopyPhone(item) }
+        holder.btnSetPc.setOnClickListener { onSetPc(item) }
+        holder.itemView.setOnClickListener { onCopyPhone(item) }
+    }
+
+    override fun getItemCount() = items.size
+
+    fun updateList(newItems: List<PcClipboardHistoryItem>) {
+        items = newItems
+        notifyDataSetChanged()
     }
 }

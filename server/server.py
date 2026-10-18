@@ -146,6 +146,46 @@ def set_win_clipboard(text):
     finally:
         user32.CloseClipboard()
 
+CLIPBOARD_HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "clipboard_history.json")
+clipboard_history = []
+clipboard_history_lock = threading.Lock()
+
+def load_clipboard_history():
+    global clipboard_history
+    if os.path.exists(CLIPBOARD_HISTORY_FILE):
+        try:
+            with open(CLIPBOARD_HISTORY_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    clipboard_history = data
+        except Exception:
+            clipboard_history = []
+
+def save_clipboard_history():
+    try:
+        with open(CLIPBOARD_HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(clipboard_history[:50], f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def add_clipboard_history_item(text):
+    global clipboard_history
+    if not text or not text.strip():
+        return
+    with clipboard_history_lock:
+        clipboard_history = [item for item in clipboard_history if item.get("text") != text]
+        item = {
+            "text": text,
+            "time": time.strftime("%I:%M %p"),
+            "timestamp": time.time(),
+            "len": len(text)
+        }
+        clipboard_history.insert(0, item)
+        clipboard_history = clipboard_history[:50]
+        save_clipboard_history()
+
+load_clipboard_history()
+
 clipboard_lock = threading.Lock()
 clipboard_cond = threading.Condition(clipboard_lock)
 current_clipboard_text = ""
@@ -155,8 +195,9 @@ def win_clipboard_watcher():
     global current_clipboard_text, clipboard_version
     try:
         init_txt = get_win_clipboard()
-        if init_txt is not None:
+        if init_txt:
             current_clipboard_text = init_txt
+            add_clipboard_history_item(init_txt)
     except Exception:
         pass
 
@@ -169,6 +210,8 @@ def win_clipboard_watcher():
                     current_clipboard_text = txt
                     clipboard_version += 1
                     clipboard_cond.notify_all()
+                if txt.strip():
+                    add_clipboard_history_item(txt)
                 preview = txt[:35].replace('\n', ' ').strip()
                 print(f"[CLIPBOARD] Windows clipboard updated (v{clipboard_version}, len={len(txt)}): '{preview}'")
         except Exception:
@@ -1110,11 +1153,27 @@ def execute_action(action_type, param=None):
                     current_clipboard_text = txt_to_set
                     clipboard_version += 1
                     clipboard_cond.notify_all()
+                if success and txt_to_set:
+                    add_clipboard_history_item(txt_to_set)
             return {
                 "status": "success" if success else "error",
                 "message": f"📋 Text copied to PC clipboard successfully:\n'{txt_to_set}'" if success else "❌ Could not set PC clipboard"
             }
         return {"status": "error", "message": "Please specify the text to copy."}
+
+    elif cmd in ["history", "clip history", "clips", "سجل", "سجل الحافظة"]:
+        with clipboard_history_lock:
+            items = list(clipboard_history)
+        if not items:
+            return {"status": "info", "message": "📋 PC clipboard history is currently empty."}
+        lines = [f"📋 Windows Clipboard History ({len(items)} items):\n"]
+        for idx, it in enumerate(items[:10], start=1):
+            t = it.get('text', '').replace('\n', ' ').strip()
+            preview = t[:60] + "..." if len(t) > 60 else t
+            time_str = it.get('time', '')
+            lines.append(f"{idx}. [{time_str}] {preview}")
+        lines.append("\n💡 Tap '📋 Win+V History' in the app to view or copy any item!")
+        return {"status": "success", "message": "\n".join(lines)}
 
     else:
         return {
@@ -1246,6 +1305,23 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
+            self.wfile.write(body)
+        elif parsed.path in ["/api/clipboard/history", "/clipboard/history"]:
+            with clipboard_history_lock:
+                items = list(clipboard_history)
+            data = {
+                "status": "success",
+                "count": len(items),
+                "current": current_clipboard_text,
+                "history": items
+            }
+            body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
         elif parsed.path in ["/api/volume", "/volume"]:
             cur = get_system_volume()
             try:
@@ -1402,6 +1478,8 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
                     current_clipboard_text = new_text
                     clipboard_version += 1
                     clipboard_cond.notify_all()
+                if success and new_text:
+                    add_clipboard_history_item(new_text)
                 preview = new_text[:50].replace('\n', ' ').strip()
                 print(f"[CLIPBOARD] Phone -> PC set clipboard (v{clipboard_version}, len={len(new_text)}): '{preview}'")
 
@@ -1412,6 +1490,19 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
             }
             body = json.dumps(resp, ensure_ascii=False).encode("utf-8")
             self.send_response(200 if success else 500)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif parsed.path in ["/api/clipboard/clear", "/clipboard/clear"]:
+            global clipboard_history
+            with clipboard_history_lock:
+                clipboard_history = []
+                save_clipboard_history()
+            resp = {"status": "success", "message": "Clipboard history cleared successfully"}
+            body = json.dumps(resp, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
             self._send_cors_headers()
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))

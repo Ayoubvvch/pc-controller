@@ -1,4 +1,4 @@
-# 🎮 PC Controller (v2.0.7)
+# 🎮 PC Controller (v2.0.8)
 
 > A lightweight, blazing-fast, and secure client-server system to remotely monitor, manage, and interact with your Windows PC from an Android device over your local Wi-Fi network.
 
@@ -20,7 +20,8 @@
 │  • Pinch-to-Zoom Screenshot Preview    │                                                     │  • Windows CoreAudio Native API        │
 │  • Direct SSH Background File Download │ <══════════════════════════════════════════════════ │  • 24/7 Watchdog Recovery Service      │
 │  • Instant Clipboard Synchronization  │                                                     │  • Absolute Persistent Power Scheduler │
-│  • Persistent Background Service       │                 Direct Background SSH/SCP           │                                        │
+│  • Windows Win+V Clipboard History     │                 Direct Background SSH/SCP           │  • Win32 Live Clipboard Watcher        │
+│  • Persistent Background Service       │                                                     │                                        │
 └────────────────────────────────────────┘                                                     └────────────────────────────────────────┘
 ```
 
@@ -34,13 +35,13 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 ┌───────────────────────────────────────┐          ┌───────────────────────────────────────┐
 │           📱 For Your Phone           │          │           💻 For Your PC              │
 │                                       │          │                                       │
-│  Download: PCRemote-v2.0.7.apk        │          │  Download: pc-controller-server.zip   │
+│  Download: PCRemote-v2.0.8.apk        │          │  Download: pc-controller-server.zip   │
 │  (Directly from GitHub Releases)      │          │  (Or use the `server/` folder)        │
 └───────────────────────────────────────┘          └───────────────────────────────────────┘
 ```
 
 ### 1. 📱 Android Setup (Mobile Device)
-1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.0.7.apk`**.
+1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.0.8.apk`**.
 2. Install the APK on your Android phone.
 3. Open the app. When connected to the same Wi-Fi, it will automatically discover your PC via UDP broadcast.
 
@@ -84,28 +85,39 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 * **Chat Attachment (`📎`):** Tap the clip icon in chat to pick and send any photo, video, or document straight to your PC's `Downloads` folder.
 * **Android System Share Sheet:** Share links, gallery photos, or PDFs from any Android app directly into **PC Remote**.
 
-### 📋 5. Instant Clipboard Synchronization (Phone ➔ PC)
+### 📋 5. PC Clipboard History (Windows Win + V on Phone)
+* **Browse Windows Clipboard History:** View and search items previously copied on your PC directly from your phone, just like Windows `Win + V`.
+* **One-Tap Actions:**
+  * **"📋 Copy":** Copies the PC clipboard item directly into your Android phone's clipboard.
+  * **"💻 Set on PC":** Re-activates that snippet on the Windows PC so you can immediately paste it (`Ctrl + V`) on your computer.
+* **Real-Time Win32 Background Watcher:** Continuously tracks Windows clipboard changes in the background without needing cloud sync or external pip packages, persisting up to 50 items securely across restarts.
+
+### 📱 6. Organized Top Bar with "More" Menu (`⋮`)
+* **Decluttered Interface:** Consolidates multiple header buttons into an elegant 3-dots popup menu providing quick access to PC Clipboard History, PC File Browser, Settings, and Connection Refresh.
+* **Quick Action Chip:** Dedicated `📋 Win+V History` chip in the quick action bar for instant one-tap access.
+
+### 📋 7. Instant Clipboard Synchronization (Phone ➔ PC)
 * **One-Tap Clipboard Button (`📋`):** Tap the dedicated clipboard button in the message bar or the `📋 Paste to PC` chip at the top.
 * **Interactive Modal Dialog:** Paste or type any text, URL, code snippet, or notes with a one-touch **"Paste from Phone"** button and live character count.
 * **Instant Native Windows Clipboard:** Text is immediately set in the Windows PC clipboard using native Win32 API. Press `Ctrl + V` anywhere on your computer to paste instantly!
 * **Chat Command Support:** You can also type `clip <text>`, `copy <text>`, or `setclip <text>` directly into the command bar.
 
-### 🔄 6. Persistent Background Service & Notification Action
+### 🔄 8. Persistent Background Service & Notification Action
 * **Stay Active 24/7:** Enable **"Keep Active in Background"** in Settings to prevent Android from terminating the app when minimized or when the screen turns off.
 * **Notification Bar Quick Action:** Displays a persistent system notification with a direct **"📋 Send Clipboard"** button.
 * **Instant Sync from Anywhere:** Tap the notification action from any app (browser, YouTube, chats) to immediately send your copied text to your PC without opening the full app!
 
-### 🔑 7. Permanent Keystore & Seamless In-Place Updates
+### 🔑 9. Permanent Keystore & Seamless In-Place Updates
 * **Fixed Signing Certificate:** Built with a committed cryptographic keystore (`release.keystore`), guaranteeing identical signatures for all builds.
 * **No More Uninstalling:** Every update can be installed directly over existing versions with one click.
 * **In-App Update Checker:** Check for new releases directly from Settings with one-click download.
 
-### 🔊 8. Real-Time Volume Control
+### 🔊 10. Real-Time Volume Control
 * Adjust master Windows audio volume using the native CoreAudio API (`vol.exe`).
 * Visual interactive volume slider in mobile chat.
 * Quick preset chips (`15%`, `25%`, `40%`, `50%`, `75%`, `100%`) and `mute` / `unmute` toggles.
 
-### 🌧️ 9. Ambient Automations
+### 🌧️ 11. Ambient Automations
 * `sleep rain 15m` — Launches `Rain.mp4` via mpv in fullscreen loop mode, adjusts volume to 28%, and automatically suspends the PC when the timer ends.
 * `sleep rain 15m min` — Minimizes all open windows so only a clean black desktop remains while audio plays, then enters sleep mode.
 * `cancel` / `stop` — Instantly stops media playback and cancels any active power scheduler.
@@ -118,6 +130,7 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 | :--- | :--- |
 | `clip <text>` / `copy <text>` | Copy text directly to Windows PC clipboard (`Ctrl + V`) |
 | `clip` | View current text in PC clipboard |
+| `history` / `clips` | View recent PC clipboard history items |
 | `screenshot` / `ss` | Capture all connected monitors combined |
 | `screenshot 1` / `ss 1` | Capture primary monitor |
 | `screenshot 2` / `ss 2` | Capture secondary monitor |

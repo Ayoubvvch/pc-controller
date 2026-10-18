@@ -31,17 +31,17 @@ jobs:
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Rename APK for release
-        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.0.7.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.0.8.apk
 
       - name: Package Windows Server Bundle
         run: |
-          zip -r pc-controller-server-windows.zip server -x "server/*.log" "server/__pycache__/*" "server/screenshots/*" "server/*.pyc" "server/power_timer.json"
+          zip -r pc-controller-server-windows.zip server -x "server/*.log" "server/__pycache__/*" "server/screenshots/*" "server/*.pyc" "server/power_timer.json" "server/clipboard_history.json"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: PCRemote-APK
-          path: PCRemote-v2.0.7.apk
+          path: PCRemote-v2.0.8.apk
 
       - name: Upload Server Artifact
         uses: actions/upload-artifact@v4
@@ -53,29 +53,29 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         with:
-          tag_name: v2.0.7
-          name: "PC Remote v2.0.7"
+          tag_name: v2.0.8
+          name: "PC Remote v2.0.8"
           body: |
-            ### 🚀 PC Remote Control (Release v2.0.7)
+            ### 🚀 PC Remote Control (Release v2.0.8)
 
             #### 📦 Downloads
-            * **📱 For Android Phones:** Download **`PCRemote-v2.0.7.apk`** below and install on your phone.
+            * **📱 For Android Phones:** Download **`PCRemote-v2.0.8.apk`** below and install on your phone.
             * **💻 For Windows PCs:** Download **`pc-controller-server-windows.zip`** below, extract anywhere, and double-click **`start.bat`**.
 
             ---
 
-            #### ✨ What's New in v2.0.7:
-            * ⚡ **Notification Clipboard Sync Fix:**
-              * Resolved the Android 10+ window focus issue where tapping "Send Clipboard" in the notification bar reported "Phone clipboard is empty".
-              * Now automatically closes system dialogs, acquires window focus, and seamlessly extracts and sends copied text to PC.
+            #### ✨ What's New in v2.0.8:
+            * 📋 **PC Clipboard History (Windows Win + V on Phone):**
+              * Browse and search items previously copied on your Windows computer directly from your phone.
+              * One tap to copy any PC history item to your phone's clipboard, or set it back as active on your PC.
+              * Real-time background clipboard monitoring on Windows with zero external dependencies.
+            * 📱 **Organized Top Header & "More" Menu (`⋮`):**
+              * Decluttered header bar with an intuitive 3-dots menu consolidating PC Clipboard History, File Browser, Settings, and Connection Refresh.
+              * Added quick `📋 Win+V History` chip for 1-tap access.
             * 🔑 **Permanent Keystore & In-Place Updates:**
-              * Signed with the permanent cryptographic keystore (`release.keystore`). Seamlessly update directly over existing versions without uninstalling.
-            * 🔄 **Persistent Background Service:**
-              * Keep active in background toggle in Settings with persistent notification bar controller.
-            * 🚀 **In-App Update Checker:**
-              * Check for updates directly inside Settings.
+              * Signed with the permanent cryptographic keystore (`release.keystore`). Update directly over existing versions without uninstalling.
           files: |
-            PCRemote-v2.0.7.apk
+            PCRemote-v2.0.8.apk
             pc-controller-server-windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
