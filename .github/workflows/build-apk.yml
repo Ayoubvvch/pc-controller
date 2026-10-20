@@ -31,7 +31,7 @@ jobs:
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Rename APK for release
-        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.1.1.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.1.2.apk
 
       - name: Package Windows Server Bundle
         run: |
@@ -41,7 +41,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PCRemote-APK
-          path: PCRemote-v2.1.1.apk
+          path: PCRemote-v2.1.2.apk
 
       - name: Upload Server Artifact
         uses: actions/upload-artifact@v4
@@ -53,27 +53,32 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         with:
-          tag_name: v2.1.1
-          name: "PC Remote v2.1.1"
+          tag_name: v2.1.2
+          name: "PC Remote v2.1.2"
           body: |
-            ### 🚀 PC Remote Control (Release v2.1.1)
+            ### 🚀 PC Remote Control (Release v2.1.2)
 
             #### 📦 Downloads
-            * **📱 For Android Phones:** Download **`PCRemote-v2.1.1.apk`** below and install on your phone.
+            * **📱 For Android Phones:** Download **`PCRemote-v2.1.2.apk`** below and install on your phone.
             * **💻 For Windows PCs:** Download **`pc-controller-server-windows.zip`** below, extract anywhere, and double-click **`start.bat`**.
 
             ---
 
-            #### ✨ What's New in v2.1.1:
-            * 📥 **Quick "Get PC Clip" Action in Persistent Notification:**
-              * Added a dedicated **"📥 Get PC Clip"** quick action button right inside the persistent Android notification bar (next to "📋 Send Clip").
-              * **Instant Reverse Sync:** Fetches whatever was copied on the PC (`Ctrl + C`) and immediately copies it into your phone's clipboard.
-              * **Non-Intrusive & Fast:** Displays a brief Toast preview of the copied content and works seamlessly from anywhere (lock screen, inside other apps, browser).
-              * Enables true two-way instant clipboard synchronization directly from the system notification bar with zero app opening!
-            * 🛠️ **Refined Dual Notification Actions:**
-              * Shortened button labels (`📋 Send Clip` & `📥 Get PC Clip`) to guarantee both actions fit perfectly on all screen widths without truncation.
+            #### ✨ What's New in v2.1.2:
+            * ⭐ **Privileged Mode (`priv-app`) Support:**
+              * Added an optional **"⭐ Privileged Mode (priv-app)"** toggle in Connection Settings.
+              * Designed for advanced users who install the app into `/system/priv-app`. Normal users can keep it off with zero behavioral changes.
+            * ⚡ **True 0.0s Zero-Lag Notification Clipboard Sync:**
+              * When Privileged Mode is enabled, tapping **"📋 Send Clip"** or **"📥 Get PC Clip"** executes instantly via a direct background broadcast receiver.
+              * Completely eliminates the transparent activity workaround, removing all screen flicker and focus delays for true instantaneous clipboard exchange.
+              * Includes automatic fallback to transparent activity if background access is ever restricted.
+            * 🎚️ **Native PC Volume Slider in Android System Volume Panel:**
+              * Integrates a remote `MediaSessionCompat` + `VolumeProviderCompat` into Android's native expandable volume panel.
+              * Adjust PC volume from outside the app by simply sliding the PC Volume bar in Android's volume panel (or media switcher).
+              * **Hardware Key Safety:** Physical volume buttons outside the app strictly control your phone's volume (phone volume always takes priority outside the app).
+              * Debounced (80ms) and synchronized in real-time with PC volume changes.
           files: |
-            PCRemote-v2.1.1.apk
+            PCRemote-v2.1.2.apk
             pc-controller-server-windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

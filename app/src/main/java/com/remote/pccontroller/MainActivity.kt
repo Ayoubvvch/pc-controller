@@ -625,6 +625,7 @@ class MainActivity : AppCompatActivity() {
                         isVolumeControl = true
                         volumeLevel = json.optInt("volume", 50)
                         cachedPcVolume = volumeLevel
+                        PcBackgroundService.updateCachedVolume(volumeLevel)
                     }
                 } catch (ignored: Exception) {
                     if (isSoundCmd) {
@@ -1452,6 +1453,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun executeVolumeRequest(volume: Int) {
+        PcBackgroundService.updateCachedVolume(volume)
         val baseUrl = getBaseUrl()
         val jsonMediaType = "application/json; charset=utf-8".toMediaType()
         val jsonPayload = JSONObject().apply {
@@ -1554,6 +1556,7 @@ class MainActivity : AppCompatActivity() {
 
         val switchKeepBackground = view.findViewById<SwitchCompat>(R.id.switchKeepBackground)
         val switchHwVolume = view.findViewById<SwitchCompat>(R.id.switchHwVolume)
+        val switchPrivAppMode = view.findViewById<SwitchCompat>(R.id.switchPrivAppMode)
         val btnCheckUpdates = view.findViewById<View>(R.id.btnCheckUpdates)
         val tvCheckUpdatesText = view.findViewById<TextView>(R.id.tvCheckUpdatesText)
 
@@ -1561,6 +1564,7 @@ class MainActivity : AppCompatActivity() {
         etPort.setText(prefs.getString("pc_port", "5050"))
         switchKeepBackground?.isChecked = prefs.getBoolean("keep_background", false)
         switchHwVolume?.isChecked = prefs.getBoolean("hw_volume_control", true)
+        switchPrivAppMode?.isChecked = prefs.getBoolean("priv_app_mode", false)
 
         btnAutoDiscover?.setOnClickListener {
             tvAutoDiscoverText?.text = "⏳ Searching network..."
@@ -1586,8 +1590,13 @@ class MainActivity : AppCompatActivity() {
                 val newPort = etPort.text.toString().trim()
                 val isBgEnabled = switchKeepBackground?.isChecked ?: false
                 val isHwVolEnabled = switchHwVolume?.isChecked ?: true
+                val isPrivAppMode = switchPrivAppMode?.isChecked ?: false
+                val wasPrivAppMode = prefs.getBoolean("priv_app_mode", false)
 
-                prefs.edit().putBoolean("hw_volume_control", isHwVolEnabled).apply()
+                prefs.edit()
+                    .putBoolean("hw_volume_control", isHwVolEnabled)
+                    .putBoolean("priv_app_mode", isPrivAppMode)
+                    .apply()
 
                 if (newIp.isNotEmpty()) {
                     prefs.edit()
@@ -1615,6 +1624,8 @@ class MainActivity : AppCompatActivity() {
                         prefs.edit().putBoolean("keep_background", false).apply()
                         Toast.makeText(this, "Background service stopped", Toast.LENGTH_SHORT).show()
                     }
+                } else if (isBgEnabled && isPrivAppMode != wasPrivAppMode) {
+                    PcBackgroundService.reloadConfig(this)
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -1655,7 +1666,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     runOnUiThread {
-                        val currentVersion = "v2.1.1"
+                        val currentVersion = "v2.1.2"
                         if (tagName.isNotEmpty() && tagName != currentVersion) {
                             statusView?.text = "🚀 New update available: $tagName"
                             AlertDialog.Builder(this@MainActivity)
@@ -1849,6 +1860,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun adjustPcVolumeDelta(delta: Int) {
         cachedPcVolume = (cachedPcVolume + delta).coerceIn(0, 100)
+        PcBackgroundService.updateCachedVolume(cachedPcVolume)
         showVolumeHud(cachedPcVolume)
         sendVolumeUpdate(cachedPcVolume)
     }
@@ -1896,6 +1908,7 @@ class MainActivity : AppCompatActivity() {
                     val vol = json.optInt("volume", -1)
                     if (vol >= 0) {
                         cachedPcVolume = vol
+                        PcBackgroundService.updateCachedVolume(vol)
                     }
                 } catch (ignored: Exception) {}
             }

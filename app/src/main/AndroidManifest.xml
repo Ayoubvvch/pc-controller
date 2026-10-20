@@ -22,6 +22,10 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <receiver
+            android:name=".ClipboardActionReceiver"
+            android:exported="false" />
+
         <activity
             android:name=".SendClipboardActivity"
             android:exported="false"
