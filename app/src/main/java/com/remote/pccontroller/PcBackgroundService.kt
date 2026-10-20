@@ -52,7 +52,7 @@ class PcBackgroundService : Service() {
                 "PC Remote Background Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Keeps PC Remote active with quick clipboard action"
+                description = "Keeps PC Remote active with quick clipboard actions"
                 setShowBadge(false)
             }
             val manager = getSystemService(NotificationManager::class.java)
@@ -72,7 +72,7 @@ class PcBackgroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Tap "Send Clipboard" action button to trigger instant sync
+        // Tap "Send Clip" action button to send phone clipboard to PC
         val sendClipboardIntent = Intent(this, SendClipboardActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -83,13 +83,25 @@ class PcBackgroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Tap "Get PC Clip" action button to fetch latest PC clipboard to phone
+        val getClipboardIntent = Intent(this, GetClipboardActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val getClipboardPendingIntent = PendingIntent.getActivity(
+            this,
+            2,
+            getClipboardIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_clipboard)
             .setContentTitle("🎮 PC Remote Control")
-            .setContentText("Active in background • Tap below to send clipboard")
+            .setContentText("Active in background • Quick clipboard actions")
             .setOngoing(true)
             .setContentIntent(openAppPendingIntent)
-            .addAction(R.drawable.ic_clipboard, "📋 Send Clipboard", sendClipboardPendingIntent)
+            .addAction(R.drawable.ic_clipboard, "📋 Send Clip", sendClipboardPendingIntent)
+            .addAction(R.drawable.ic_download, "📥 Get PC Clip", getClipboardPendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()

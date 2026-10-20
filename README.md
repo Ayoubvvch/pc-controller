@@ -1,4 +1,4 @@
-# 🎮 PC Controller (v2.1.0)
+# 🎮 PC Controller (v2.1.1)
 
 > A lightweight, blazing-fast, and secure client-server system to remotely monitor, manage, and interact with your Windows PC from an Android device over your local Wi-Fi network.
 
@@ -36,13 +36,13 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 ┌───────────────────────────────────────┐          ┌───────────────────────────────────────┐
 │           📱 For Your Phone           │          │           💻 For Your PC              │
 │                                       │          │                                       │
-│  Download: PCRemote-v2.1.0.apk        │          │  Download: pc-controller-server.zip   │
+│  Download: PCRemote-v2.1.1.apk        │          │  Download: pc-controller-server.zip   │
 │  (Directly from GitHub Releases)      │          │  (Or use the `server/` folder)        │
 └───────────────────────────────────────┘          └───────────────────────────────────────┘
 ```
 
 ### 1. 📱 Android Setup (Mobile Device)
-1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.1.0.apk`**.
+1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.1.1.apk`**.
 2. Install the APK on your Android phone.
 3. Open the app. When connected to the same Wi-Fi, it will automatically discover your PC via UDP broadcast.
 
@@ -109,10 +109,12 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 * **Instant Native Windows Clipboard:** Text is immediately set in the Windows PC clipboard using native Win32 API. Press `Ctrl + V` anywhere on your computer to paste instantly!
 * **Chat Command Support:** You can also type `clip <text>`, `copy <text>`, or `setclip <text>` directly into the command bar.
 
-### 🔄 8. Persistent Background Service & Notification Action
+### 🔄 8. Persistent Background Service & Dual Notification Actions
 * **Stay Active 24/7:** Enable **"Keep Active in Background"** in Settings to prevent Android from terminating the app when minimized or when the screen turns off.
-* **Notification Bar Quick Action:** Displays a persistent system notification with a direct **"📋 Send Clipboard"** button.
-* **Instant Sync from Anywhere:** Tap the notification action from any app (browser, YouTube, chats) to immediately send your copied text to your PC without opening the full app!
+* **Notification Bar Quick Actions:** Displays a persistent system notification with dual one-tap actions:
+  * **"📋 Send Clip":** Immediately sends your phone's copied text to your PC without opening the app!
+  * **"📥 Get PC Clip":** Immediately fetches whatever was copied on your PC (Ctrl + C) and copies it into your phone's clipboard!
+* **Instant Bidirectional Sync from Anywhere:** Tap either notification action from any app (browser, YouTube, chats, lock screen) for instant two-way clipboard exchange.
 
 ### 🚀 9. In-App Direct APK Downloader & Auto-Installer
 * **One-Click In-App Update:** Tapping **"Check for App Updates"** in Settings now downloads the new APK directly inside the app with a live progress dialog showing percentage, downloaded MB, and total size.

@@ -31,7 +31,7 @@ jobs:
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Rename APK for release
-        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.1.0.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.1.1.apk
 
       - name: Package Windows Server Bundle
         run: |
@@ -41,7 +41,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PCRemote-APK
-          path: PCRemote-v2.1.0.apk
+          path: PCRemote-v2.1.1.apk
 
       - name: Upload Server Artifact
         uses: actions/upload-artifact@v4
@@ -53,32 +53,27 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         with:
-          tag_name: v2.1.0
-          name: "PC Remote v2.1.0"
+          tag_name: v2.1.1
+          name: "PC Remote v2.1.1"
           body: |
-            ### 🚀 PC Remote Control (Release v2.1.0)
+            ### 🚀 PC Remote Control (Release v2.1.1)
 
             #### 📦 Downloads
-            * **📱 For Android Phones:** Download **`PCRemote-v2.1.0.apk`** below and install on your phone.
+            * **📱 For Android Phones:** Download **`PCRemote-v2.1.1.apk`** below and install on your phone.
             * **💻 For Windows PCs:** Download **`pc-controller-server-windows.zip`** below, extract anywhere, and double-click **`start.bat`**.
 
             ---
 
-            #### ✨ What's New in v2.1.0:
-            * 📁 **High-Speed SSH Folder Transfers with Overwrite Mode:**
-              * Transfer entire folders directly from PC to phone via SSH at full Wi-Fi LAN speed.
-              * **Automatic Overwrite Mode:** Existing matching files in the target directory on your phone are replaced (not skipped).
-              * **Phone Destination Picker:** Choose where to unpack/save on your phone (`Download`, `Documents`, `Pictures`, `Movies`, `Music`, or custom path).
-              * **Drive Root Protection:** Drive roots (e.g. `C:\`, `D:\`) are strictly shielded and blocked from accidental bulk transfer.
-              * **Safe Folder Sizing (> 500 MB Warning):** Non-blocking, fast recursive scan with symlink/junction loop avoidance alerts the user before transferring folders larger than 500 MB.
-            * 🖥️ **Live Dedicated PC Console Window:**
-              * When a transfer begins, a real, visible Command Prompt terminal opens on your PC displaying live OpenSSH progress, transfer speed, and ETA.
-              * **PC Stop & Control:** Press `Ctrl+C` or close the CMD window from your PC anytime to cancel the transfer immediately.
-              * Leaves the phone app completely unburdened and free — you can lock your screen or close the app safely.
-            * 📥 **"Download Current Folder" Action in File Browser:**
-              * Convenient one-tap button in the top action bar of the PC File Browser to transfer the currently viewed folder.
+            #### ✨ What's New in v2.1.1:
+            * 📥 **Quick "Get PC Clip" Action in Persistent Notification:**
+              * Added a dedicated **"📥 Get PC Clip"** quick action button right inside the persistent Android notification bar (next to "📋 Send Clip").
+              * **Instant Reverse Sync:** Fetches whatever was copied on the PC (`Ctrl + C`) and immediately copies it into your phone's clipboard.
+              * **Non-Intrusive & Fast:** Displays a brief Toast preview of the copied content and works seamlessly from anywhere (lock screen, inside other apps, browser).
+              * Enables true two-way instant clipboard synchronization directly from the system notification bar with zero app opening!
+            * 🛠️ **Refined Dual Notification Actions:**
+              * Shortened button labels (`📋 Send Clip` & `📥 Get PC Clip`) to guarantee both actions fit perfectly on all screen widths without truncation.
           files: |
-            PCRemote-v2.1.0.apk
+            PCRemote-v2.1.1.apk
             pc-controller-server-windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
