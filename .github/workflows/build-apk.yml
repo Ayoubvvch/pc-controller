@@ -31,7 +31,7 @@ jobs:
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Rename APK for release
-        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.1.2.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk PCRemote-v2.1.3.apk
 
       - name: Package Windows Server Bundle
         run: |
@@ -41,7 +41,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PCRemote-APK
-          path: PCRemote-v2.1.2.apk
+          path: PCRemote-v2.1.3.apk
 
       - name: Upload Server Artifact
         uses: actions/upload-artifact@v4
@@ -53,32 +53,29 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         with:
-          tag_name: v2.1.2
-          name: "PC Remote v2.1.2"
+          tag_name: v2.1.3
+          name: "PC Remote v2.1.3"
           body: |
-            ### 🚀 PC Remote Control (Release v2.1.2)
+            ### 🚀 PC Remote Control (Release v2.1.3 - Stability Update)
 
             #### 📦 Downloads
-            * **📱 For Android Phones:** Download **`PCRemote-v2.1.2.apk`** below and install on your phone.
+            * **📱 For Android Phones:** Download **`PCRemote-v2.1.3.apk`** below and install on your phone.
             * **💻 For Windows PCs:** Download **`pc-controller-server-windows.zip`** below, extract anywhere, and double-click **`start.bat`**.
 
             ---
 
-            #### ✨ What's New in v2.1.2:
-            * ⭐ **Privileged Mode (`priv-app`) Support:**
-              * Added an optional **"⭐ Privileged Mode (priv-app)"** toggle in Connection Settings.
-              * Designed for advanced users who install the app into `/system/priv-app`. Normal users can keep it off with zero behavioral changes.
-            * ⚡ **True 0.0s Zero-Lag Notification Clipboard Sync:**
-              * When Privileged Mode is enabled, tapping **"📋 Send Clip"** or **"📥 Get PC Clip"** executes instantly via a direct background broadcast receiver.
-              * Completely eliminates the transparent activity workaround, removing all screen flicker and focus delays for true instantaneous clipboard exchange.
-              * Includes automatic fallback to transparent activity if background access is ever restricted.
-            * 🎚️ **Native PC Volume Slider in Android System Volume Panel:**
-              * Integrates a remote `MediaSessionCompat` + `VolumeProviderCompat` into Android's native expandable volume panel.
-              * Adjust PC volume from outside the app by simply sliding the PC Volume bar in Android's volume panel (or media switcher).
-              * **Hardware Key Safety:** Physical volume buttons outside the app strictly control your phone's volume (phone volume always takes priority outside the app).
-              * Debounced (80ms) and synchronized in real-time with PC volume changes.
+            #### ✨ What's in v2.1.3:
+            * 🛡️ **Complete Stability & Reliability Restoration:**
+              * Reverted experimental priv-app background receivers and system media session.
+              * Restored the rock-solid, battle-tested transparent focus mechanism for notification quick actions.
+            * 📋 **Two-Way Instant Notification Clipboard Sync:**
+              * **"📋 Send Clip"** & **"📥 Get PC Clip"** work flawlessly from anywhere (lock screen, browsers, YouTube, inside any app).
+              * Reliable, fast, and 100% compatible across standard Android and custom ROMs.
+            * 🔊 **Hardware Volume Control:**
+              * Phone physical volume keys outside the app strictly control your phone's volume with 100% priority.
+              * Inside the app, phone physical volume keys control PC volume with real-time HUD (when enabled).
           files: |
-            PCRemote-v2.1.2.apk
+            PCRemote-v2.1.3.apk
             pc-controller-server-windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

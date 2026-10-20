@@ -1,4 +1,4 @@
-# 🎮 PC Controller (v2.1.2)
+# 🎮 PC Controller (v2.1.3)
 
 > A lightweight, blazing-fast, and secure client-server system to remotely monitor, manage, and interact with your Windows PC from an Android device over your local Wi-Fi network.
 
@@ -36,13 +36,13 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 ┌───────────────────────────────────────┐          ┌───────────────────────────────────────┐
 │           📱 For Your Phone           │          │           💻 For Your PC              │
 │                                       │          │                                       │
-│  Download: PCRemote-v2.1.2.apk        │          │  Download: pc-controller-server.zip   │
+│  Download: PCRemote-v2.1.3.apk        │          │  Download: pc-controller-server.zip   │
 │  (Directly from GitHub Releases)      │          │  (Or use the `server/` folder)        │
 └───────────────────────────────────────┘          └───────────────────────────────────────┘
 ```
 
 ### 1. 📱 Android Setup (Mobile Device)
-1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.1.2.apk`**.
+1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.1.3.apk`**.
 2. Install the APK on your Android phone.
 3. Open the app. When connected to the same Wi-Fi, it will automatically discover your PC via UDP broadcast.
 
@@ -129,19 +129,7 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 * **Native Windows CoreAudio API:** Instant, crackle-free audio level adjustments (`vol.exe`).
 * **Visual Slider & Presets:** Quick preset chips (`15%`, `25%`, `40%`, `50%`, `75%`, `100%`) and `mute` / `unmute` toggles.
 
-### ⭐ 11. Privileged Mode (`/system/priv-app`) & Native Volume Panel
-* **Optional Privileged Mode Toggle:** Easily enabled in Settings for power users running the app inside Android's `/system/priv-app` partition. Standard users retain complete backward compatibility with zero forced changes.
-* **⚡ Instant Zero-Lag Clipboard Sync:**
-  * Notification quick actions (`📋 Send Clip` and `📥 Get PC Clip`) execute directly via a background broadcast receiver with 0.0s delay.
-  * Completely bypasses the transparent activity workaround, eliminating screen flickers and focus delays for true instant clipboard exchange.
-  * Automatically falls back to transparent activity if background access is ever restricted.
-* **🎚️ PC Volume in Android Native Volume Panel:**
-  * Registers a remote `MediaSessionCompat` + `VolumeProviderCompat` into Android's native expandable volume panel.
-  * Adjust PC master volume from anywhere by simply sliding the PC Volume slider in the Android system volume panel or media output switcher.
-  * **Strict Phone Priority:** Physical hardware buttons outside the app continue to strictly control your phone's media and ringer volume, guaranteeing your phone volume is never hijacked while outside the app.
-  * Smooth 80ms debouncing and bidirectional real-time synchronization between PC and phone.
-
-### 🌧️ 12. Ambient Automations
+### 🌧️ 11. Ambient Automations
 * `sleep rain 15m` — Launches `Rain.mp4` via mpv in fullscreen loop mode, adjusts volume to 28%, and automatically suspends the PC when the timer ends.
 * `sleep rain 15m min` — Minimizes all open windows so only a clean black desktop remains while audio plays, then enters sleep mode.
 * `cancel` / `stop` — Instantly stops media playback and cancels any active power scheduler.
