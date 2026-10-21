@@ -1821,7 +1821,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSettingsDialog() {
-        val view = LayoutInflater.from(this).inflate(R.layout.dialog_settings, null)
+        val dialog = BottomSheetDialog(this)
+        val view = LayoutInflater.from(this).inflate(R.layout.bottom_sheet_settings, null)
+        dialog.setContentView(view)
+
         val etIp = view.findViewById<EditText>(R.id.etIpAddress)
         val etPort = view.findViewById<EditText>(R.id.etPort)
         val btnAutoDiscover = view.findViewById<View>(R.id.btnAutoDiscover)
@@ -1831,6 +1834,12 @@ class MainActivity : AppCompatActivity() {
         val switchHwVolume = view.findViewById<SwitchCompat>(R.id.switchHwVolume)
         val btnCheckUpdates = view.findViewById<View>(R.id.btnCheckUpdates)
         val tvCheckUpdatesText = view.findViewById<TextView>(R.id.tvCheckUpdatesText)
+        val btnCloseSettings = view.findViewById<ImageButton>(R.id.btnCloseSettings)
+        val btnSaveSettings = view.findViewById<View>(R.id.btnSaveSettings)
+        val tvPairBadge = view.findViewById<TextView>(R.id.tvPairBadge)
+        val tvVersionBadge = view.findViewById<TextView>(R.id.tvVersionBadge)
+
+        tvVersionBadge?.text = "v2.3.0"
 
         etIp.setText(prefs.getString("pc_ip", "192.168.11.110"))
         etPort.setText(prefs.getString("pc_port", "5050"))
@@ -1853,60 +1862,66 @@ class MainActivity : AppCompatActivity() {
         val btnRePair = view.findViewById<View>(R.id.btnRePair)
         val tvPairStatusText = view.findViewById<TextView>(R.id.tvPairStatusText)
         val hasToken = !prefs.getString("auth_token", null).isNullOrEmpty()
-        tvPairStatusText?.text = if (hasToken) "🛡️ Re-pair Device with PC (Paired ✅)" else "🛡️ Pair Device with PC"
+        tvPairStatusText?.text = if (hasToken) "🛡️ Re-pair Device with PC" else "🛡️ Pair Device with PC"
+        tvPairBadge?.text = if (hasToken) "Paired ✅" else "Unpaired ⚠️"
+        if (!hasToken) {
+            tvPairBadge?.setTextColor(ContextCompat.getColor(this, R.color.warning))
+        }
+
+        btnRePair?.setOnClickListener {
+            prefs.edit().remove("auth_token").apply()
+            dialog.dismiss()
+            startDevicePairingFlow()
+        }
 
         btnCheckUpdates?.setOnClickListener {
             checkForUpdates(tvCheckUpdatesText)
         }
 
-        var settingsDialog: AlertDialog? = null
-        val dialogBuilder = AlertDialog.Builder(this)
-            .setView(view)
-            .setPositiveButton("Save") { _, _ ->
-                val newIp = etIp.text.toString().trim()
-                val newPort = etPort.text.toString().trim()
-                val isBgEnabled = switchKeepBackground?.isChecked ?: false
-                val isHwVolEnabled = switchHwVolume?.isChecked ?: true
+        btnCloseSettings?.setOnClickListener {
+            dialog.dismiss()
+        }
 
-                prefs.edit().putBoolean("hw_volume_control", isHwVolEnabled).apply()
+        btnSaveSettings?.setOnClickListener {
+            val newIp = etIp.text.toString().trim()
+            val newPort = etPort.text.toString().trim()
+            val isBgEnabled = switchKeepBackground?.isChecked ?: false
+            val isHwVolEnabled = switchHwVolume?.isChecked ?: true
 
-                if (newIp.isNotEmpty()) {
-                    prefs.edit()
-                        .putString("pc_ip", newIp)
-                        .putString("pc_port", if (newPort.isNotEmpty()) newPort else "5050")
-                        .apply()
-                    Toast.makeText(this, "Settings saved", Toast.LENGTH_SHORT).show()
-                    checkConnection()
-                }
+            prefs.edit().putBoolean("hw_volume_control", isHwVolEnabled).apply()
 
-                // Handle background service toggle
-                val wasBgEnabled = prefs.getBoolean("keep_background", false)
-                if (isBgEnabled != wasBgEnabled) {
-                    if (isBgEnabled) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                            requestNotificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                        } else {
-                            PcBackgroundService.start(this)
-                            prefs.edit().putBoolean("keep_background", true).apply()
-                            Toast.makeText(this, "🔄 Persistent background service started", Toast.LENGTH_SHORT).show()
-                        }
+            if (newIp.isNotEmpty()) {
+                prefs.edit()
+                    .putString("pc_ip", newIp)
+                    .putString("pc_port", if (newPort.isNotEmpty()) newPort else "5050")
+                    .apply()
+                Toast.makeText(this, "Settings saved successfully", Toast.LENGTH_SHORT).show()
+                checkConnection()
+            }
+
+            // Handle background service toggle
+            val wasBgEnabled = prefs.getBoolean("keep_background", false)
+            if (isBgEnabled != wasBgEnabled) {
+                if (isBgEnabled) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                        requestNotificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                     } else {
-                        PcBackgroundService.stop(this)
-                        prefs.edit().putBoolean("keep_background", false).apply()
-                        Toast.makeText(this, "Background service stopped", Toast.LENGTH_SHORT).show()
+                        PcBackgroundService.start(this)
+                        prefs.edit().putBoolean("keep_background", true).apply()
+                        Toast.makeText(this, "🔄 Persistent background service started", Toast.LENGTH_SHORT).show()
                     }
+                } else {
+                    PcBackgroundService.stop(this)
+                    prefs.edit().putBoolean("keep_background", false).apply()
+                    Toast.makeText(this, "Background service stopped", Toast.LENGTH_SHORT).show()
                 }
             }
-            .setNegativeButton("Cancel", null)
 
-        settingsDialog = dialogBuilder.create()
-        btnRePair?.setOnClickListener {
-            prefs.edit().remove("auth_token").apply()
-            settingsDialog?.dismiss()
-            startDevicePairingFlow()
+            dialog.dismiss()
         }
-        settingsDialog.show()
+
+        dialog.show()
     }
 
     private fun checkForUpdates(statusView: TextView?) {
@@ -1943,7 +1958,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     runOnUiThread {
-                        val currentVersion = "v2.2.1"
+                        val currentVersion = "v2.3.0"
                         if (tagName.isNotEmpty() && tagName != currentVersion) {
                             statusView?.text = "🚀 New update available: $tagName"
                             AlertDialog.Builder(this@MainActivity)
@@ -2335,33 +2350,38 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showMoreMenu(anchor: View) {
-        val popup = PopupMenu(this, anchor)
-        popup.menu.add(0, 1, 0, "📋 PC Clipboard (Win + V)")
-        popup.menu.add(0, 2, 1, "📁 Browse PC Files")
-        popup.menu.add(0, 3, 2, "⚙️ Settings & Updates")
-        popup.menu.add(0, 4, 3, "🔄 Refresh Connection")
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                1 -> {
-                    showClipboardHistoryDialog()
-                    true
-                }
-                2 -> {
-                    showFileBrowserDialog()
-                    true
-                }
-                3 -> {
-                    showSettingsDialog()
-                    true
-                }
-                4 -> {
-                    checkConnection(autoDiscoverOnFail = true)
-                    true
-                }
-                else -> false
-            }
+        val dialog = BottomSheetDialog(this)
+        val view = LayoutInflater.from(this).inflate(R.layout.bottom_sheet_more_menu, null)
+        dialog.setContentView(view)
+
+        view.findViewById<ImageButton>(R.id.btnCloseMoreMenu)?.setOnClickListener { dialog.dismiss() }
+
+        view.findViewById<View>(R.id.itemMenuClipboard)?.setOnClickListener {
+            dialog.dismiss()
+            showClipboardHistoryDialog()
         }
-        popup.show()
+
+        view.findViewById<View>(R.id.itemMenuFiles)?.setOnClickListener {
+            dialog.dismiss()
+            showFileBrowserDialog()
+        }
+
+        view.findViewById<View>(R.id.itemMenuLoop)?.setOnClickListener {
+            dialog.dismiss()
+            showLoopVideoOptionsDialog()
+        }
+
+        view.findViewById<View>(R.id.itemMenuSettings)?.setOnClickListener {
+            dialog.dismiss()
+            showSettingsDialog()
+        }
+
+        view.findViewById<View>(R.id.itemMenuRefresh)?.setOnClickListener {
+            dialog.dismiss()
+            checkConnection(autoDiscoverOnFail = true)
+        }
+
+        dialog.show()
     }
 
     private fun showClipboardHistoryDialog() {

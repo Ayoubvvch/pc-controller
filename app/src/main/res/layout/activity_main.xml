@@ -48,9 +48,9 @@
             android:id="@+id/btnRefresh"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/bg_chip"
             android:contentDescription="Refresh"
-            android:padding="8dp"
+            android:padding="9dp"
             android:src="@drawable/ic_refresh"
             app:tint="@color/text_secondary" />
 
@@ -58,10 +58,10 @@
             android:id="@+id/btnMore"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:layout_marginStart="4dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_chip"
             android:contentDescription="More Options"
-            android:padding="8dp"
+            android:padding="9dp"
             android:src="@drawable/ic_more_vert"
             app:tint="@color/text_primary" />
 
@@ -458,11 +458,11 @@
             android:layout_width="46dp"
             android:layout_height="46dp"
             android:layout_marginStart="8dp"
-            android:background="@drawable/bg_chip"
+            android:background="@drawable/bg_button_accent"
             android:contentDescription="Send"
-            android:padding="11dp"
+            android:padding="12dp"
             android:src="@drawable/ic_send"
-            app:tint="@color/primary_light" />
+            app:tint="@color/text_primary" />
 
     </LinearLayout>
 

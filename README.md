@@ -1,4 +1,4 @@
-# 🎮 PC Controller (v2.2.1)
+# 🎮 PC Controller (v2.3.0)
 
 > A lightweight, blazing-fast, and secure client-server system to remotely monitor, manage, and interact with your Windows PC from an Android device over your local Wi-Fi network.
 
@@ -36,13 +36,13 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 ┌───────────────────────────────────────┐          ┌───────────────────────────────────────┐
 │           📱 For Your Phone           │          │           💻 For Your PC              │
 │                                       │          │                                       │
-│  Download: PCRemote-v2.2.1.apk        │          │  Download: pc-controller-server.zip   │
+│  Download: PCRemote-v2.3.0.apk        │          │  Download: pc-controller-server.zip   │
 │  (Directly from GitHub Releases)      │          │  (Or use the `server/` folder)        │
 └───────────────────────────────────────┘          └───────────────────────────────────────┘
 ```
 
 ### 1. 📱 Android Setup (Mobile Device)
-1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.2.1.apk`**.
+1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.3.0.apk`**.
 2. Install the APK on your Android phone.
 3. Open the app. When connected to the same Wi-Fi, it will automatically discover your PC via UDP broadcast.
 

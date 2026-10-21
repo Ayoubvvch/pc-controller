@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:android="http://schemas.android.com/apk/res/android">
     <style name="Theme.PCRemote" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <!-- Primary brand color. -->
         <item name="colorPrimary">@color/primary</item>
@@ -11,6 +11,25 @@
         <!-- Status bar color. -->
         <item name="android:statusBarColor">@color/bg_dark</item>
         <item name="android:windowBackground">@color/bg_dark</item>
+        
+        <!-- BottomSheet Styling -->
+        <item name="bottomSheetDialogTheme">@style/CustomBottomSheetDialogTheme</item>
+    </style>
+
+    <style name="CustomBottomSheetDialogTheme" parent="ThemeOverlay.MaterialComponents.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/CustomBottomSheetStyle</item>
+    </style>
+
+    <style name="CustomBottomSheetStyle" parent="Widget.MaterialComponents.BottomSheet">
+        <item name="shapeAppearance">@style/ShapeAppearance.App.BottomSheet</item>
+        <item name="backgroundTint">@color/surface_dark</item>
+    </style>
+
+    <style name="ShapeAppearance.App.BottomSheet" parent="ShapeAppearance.MaterialComponents.LargeComponent">
+        <item name="cornerSizeTopLeft">24dp</item>
+        <item name="cornerSizeTopRight">24dp</item>
+        <item name="cornerSizeBottomLeft">0dp</item>
+        <item name="cornerSizeBottomRight">0dp</item>
     </style>
 
     <style name="Theme.Transparent" parent="Theme.MaterialComponents.DayNight.NoActionBar">
