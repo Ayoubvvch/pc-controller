@@ -1865,7 +1865,7 @@ class MainActivity : AppCompatActivity() {
         tvPairStatusText?.text = if (hasToken) "🛡️ Re-pair Device with PC" else "🛡️ Pair Device with PC"
         tvPairBadge?.text = if (hasToken) "Paired ✅" else "Unpaired ⚠️"
         if (!hasToken) {
-            tvPairBadge?.setTextColor(ContextCompat.getColor(this, R.color.warning))
+            tvPairBadge?.setTextColor(Color.parseColor("#F59E0B"))
         }
 
         btnRePair?.setOnClickListener {
