@@ -114,6 +114,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Video Picker for Universal Video Looper (plays immediately in loop at 16% volume)
+    private val videoPickerLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            uploadFileToPc(uri, playLoop = true)
+        }
+    }
+
     // Notification permission launcher for Android 13+
     private val requestNotificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -191,8 +198,14 @@ class MainActivity : AppCompatActivity() {
         btnSend.setOnClickListener {
             val text = etCommand.text.toString().trim()
             if (text.isNotEmpty()) {
-                sendCommand(text)
-                etCommand.text.clear()
+                val lower = text.lowercase()
+                if (lower in listOf("loop upload", "upload video", "send video", "loop video upload")) {
+                    etCommand.text.clear()
+                    videoPickerLauncher.launch("video/*")
+                } else {
+                    sendCommand(text)
+                    etCommand.text.clear()
+                }
             }
         }
 
@@ -319,7 +332,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.chipScreenshotAll)?.setOnClickListener { sendCommand("screenshot all") }
         findViewById<TextView>(R.id.chipScreenshot1)?.setOnClickListener { sendCommand("screenshot 1") }
         findViewById<TextView>(R.id.chipScreenshot2)?.setOnClickListener { sendCommand("screenshot 2") }
-        findViewById<TextView>(R.id.chipMessi)?.setOnClickListener { sendCommand("messi") }
+        findViewById<TextView>(R.id.chipLoopVideo)?.setOnClickListener { showLoopVideoOptionsDialog() }
         findViewById<TextView>(R.id.chipRain)?.setOnClickListener { sendCommand("sleep rain 15min") }
         findViewById<TextView>(R.id.chipRainMin)?.setOnClickListener { sendCommand("sleep rain 15m min") }
         findViewById<TextView>(R.id.chipSoundSlider)?.setOnClickListener { sendCommand("sound") }
@@ -341,6 +354,27 @@ class MainActivity : AppCompatActivity() {
                 sendCommand("shutdown")
             }
         }
+    }
+
+    private fun showLoopVideoOptionsDialog() {
+        val options = arrayOf(
+            "📂 Select from PC Files Explorer",
+            "📤 Upload Video from Phone & Loop",
+            "🔁 Replay Last Video",
+            "⏹️ Stop Video Playback"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("🎬 Universal Video Looper")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showFileBrowserDialog()
+                    1 -> videoPickerLauncher.launch("video/*")
+                    2 -> sendCommand("loop")
+                    3 -> sendCommand("stop")
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun showConfirmationDialog(title: String, message: String, onConfirm: () -> Unit) {
@@ -863,7 +897,7 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    private fun uploadFileToPc(uri: Uri) {
+    private fun uploadFileToPc(uri: Uri, playLoop: Boolean = false) {
         var fileName = "file_${System.currentTimeMillis()}"
         var fileSize: Long = 0
 
@@ -885,7 +919,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         val sizeFormatted = formatFileSize(fileSize)
-        addUserMessage("📎 Sending: $fileName ($sizeFormatted)")
+        if (playLoop) {
+            addUserMessage("🎬 Uploading & Looping: $fileName ($sizeFormatted)")
+        } else {
+            addUserMessage("📎 Sending: $fileName ($sizeFormatted)")
+        }
 
         val baseUrl = getBaseUrl()
         val encodedName = Base64.encodeToString(fileName.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
@@ -904,11 +942,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val request = Request.Builder()
+        val requestBuilder = Request.Builder()
             .url("$baseUrl/upload")
             .header("X-Filename-B64", encodedName)
             .post(requestBody)
-            .build()
+
+        if (playLoop) {
+            requestBuilder.header("X-Play-Loop", "true")
+        }
+
+        val request = requestBuilder.build()
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
@@ -1169,7 +1212,26 @@ class MainActivity : AppCompatActivity() {
                 if (item.isDirectory) {
                     loadFolder(item.path)
                 } else {
-                    downloadFileFromPc(item)
+                    val lower = item.name.lowercase()
+                    val isVideo = lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".mov") ||
+                                  lower.endsWith(".avi") || lower.endsWith(".webm") || lower.endsWith(".flv") ||
+                                  lower.endsWith(".wmv") || lower.endsWith(".m4v")
+                    if (isVideo) {
+                        AlertDialog.Builder(this)
+                            .setTitle("🎬 Video Options")
+                            .setMessage("Choose action for:\n${item.name}")
+                            .setPositiveButton("🎬 Loop on PC (16% Vol)") { _, _ ->
+                                sendCommand("loop ${item.path}")
+                                dialog.dismiss()
+                            }
+                            .setNeutralButton("📥 Download to Phone") { _, _ ->
+                                downloadFileFromPc(item)
+                            }
+                            .setNegativeButton("Cancel", null)
+                            .show()
+                    } else {
+                        downloadFileFromPc(item)
+                    }
                 }
             },
             onDownloadClick = { item ->
@@ -1881,7 +1943,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     runOnUiThread {
-                        val currentVersion = "v2.2.0"
+                        val currentVersion = "v2.2.1"
                         if (tagName.isNotEmpty() && tagName != currentVersion) {
                             statusView?.text = "🚀 New update available: $tagName"
                             AlertDialog.Builder(this@MainActivity)

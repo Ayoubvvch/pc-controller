@@ -534,6 +534,87 @@ def format_size(num_bytes):
     else:
         return f"{num_bytes} B"
 
+# Universal Video Looper Settings & State
+LAST_LOOP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_loop_video.txt")
+
+def get_last_loop_video():
+    """Returns the path of the last played video in loop mode."""
+    try:
+        if os.path.exists(LAST_LOOP_FILE):
+            with open(LAST_LOOP_FILE, "r", encoding="utf-8") as f:
+                p = f.read().strip()
+                if p and os.path.exists(p):
+                    return p
+    except Exception:
+        pass
+    if os.path.exists(MESSI_VIDEO):
+        return MESSI_VIDEO
+    return None
+
+def set_last_loop_video(path):
+    """Saves the path of the last played video."""
+    try:
+        with open(LAST_LOOP_FILE, "w", encoding="utf-8") as f:
+            f.write(path)
+    except Exception:
+        pass
+
+def play_video_loop(video_path):
+    """
+    Plays any video in Fullscreen, Infinite Loop, at 16% System Volume using mpv.
+    """
+    if not video_path or not str(video_path).strip():
+        return {
+            "status": "error",
+            "message": "❌ No video file specified."
+        }
+
+    raw = str(video_path).strip().strip('"').strip("'")
+    target_video = raw
+
+    # Resolve video path if not found directly
+    if not os.path.exists(target_video):
+        cand1 = os.path.join(DOWNLOADS_DIR, raw)
+        cand2 = os.path.join(r"F:\ZPCController", raw)
+        cand3 = os.path.join(os.path.dirname(os.path.abspath(__file__)), raw)
+        cand4 = os.path.join(os.path.expanduser("~"), "Videos", raw)
+        if os.path.exists(cand1):
+            target_video = cand1
+        elif os.path.exists(cand2):
+            target_video = cand2
+        elif os.path.exists(cand3):
+            target_video = cand3
+        elif os.path.exists(cand4):
+            target_video = cand4
+        else:
+            return {
+                "status": "error",
+                "message": f"❌ Video file not found: {raw}"
+            }
+
+    mpv_exec = MPV_PATH if os.path.exists(MPV_PATH) else "mpv"
+
+    # Stop any currently active mpv
+    kill_mpv()
+
+    # Set master volume to 16%
+    set_system_volume(16)
+
+    try:
+        subprocess.Popen([mpv_exec, "--fs", "--loop-file=inf", target_video],
+                         creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        set_last_loop_video(target_video)
+        fname = os.path.basename(target_video)
+        return {
+            "status": "success",
+            "message": f"🎬 Playing '{fname}' in looping fullscreen mode at 16% volume! 🔥\n💡 Send 'stop' or 'close' to exit."
+        }
+    except Exception as ex:
+        return {
+            "status": "error",
+            "message": f"❌ Failed to launch video player: {str(ex)}"
+        }
+
 def take_screenshot(screen_target="all"):
     """Captures the PC screen (all or specific display) and returns the image details."""
     try:
@@ -1033,25 +1114,55 @@ def execute_action(action_type, param=None):
             )
         }
 
-    elif cmd in ["messi", "ميسي", "m", "messi mp4", "messi.mp4"]:
-        kill_mpv()
+    elif (cmd.startswith("loop ") or cmd.startswith("play ") or cmd.startswith("video ") or
+          cmd in ["loop", "video", "looper", "فيديو", "تكرار"] or
+          cmd in ["messi", "ميسي", "m", "messi mp4", "messi.mp4"]):
 
-        # Set system volume to 16%
-        set_system_volume(16)
-
-        if not os.path.exists(MESSI_VIDEO):
+        # Legacy messi commands
+        if cmd in ["messi", "ميسي", "m", "messi mp4", "messi.mp4"]:
+            if os.path.exists(MESSI_VIDEO):
+                return play_video_loop(MESSI_VIDEO)
+            last_vid = get_last_loop_video()
+            if last_vid and os.path.exists(last_vid):
+                return play_video_loop(last_vid)
             return {
                 "status": "error",
                 "message": f"❌ Video file not found: {MESSI_VIDEO}"
             }
 
-        mpv_exec = MPV_PATH if os.path.exists(MPV_PATH) else "mpv"
-        subprocess.Popen([mpv_exec, "--fs", "--loop-file=inf", MESSI_VIDEO],
-                         creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-        return {
-            "status": "success",
-            "message": "🐐⚽ Playing Messi.mp4 in looping fullscreen mode at 16% volume! 🔥\n💡 Send 'stop' to close video."
-        }
+        # Check if argument was passed: e.g. "loop C:\path\video.mp4"
+        arg = ""
+        for prefix in ["loop ", "play ", "video "]:
+            if cmd.startswith(prefix):
+                arg = action_type[len(prefix):].strip().strip('"').strip("'")
+                break
+
+        if arg:
+            if arg.lower() in ["stop", "close", "cancel", "kill", "exit", "إيقاف", "الغاء"]:
+                kill_mpv()
+                return {
+                    "status": "success",
+                    "message": "⏹️ Video playback stopped."
+                }
+            return play_video_loop(arg)
+
+        # Bare command: "loop", "video", "looper"
+        last_vid = get_last_loop_video()
+        if last_vid and os.path.exists(last_vid):
+            res = play_video_loop(last_vid)
+            res["message"] = f"🔁 Replaying last video: '{os.path.basename(last_vid)}' in loop mode at 16% volume!\n💡 Send 'stop' to close."
+            return res
+        else:
+            return {
+                "status": "info",
+                "message": (
+                    "🎬 Universal Video Looper:\n\n"
+                    "• Tap '🎬 Loop Video' chip to choose or upload a video\n"
+                    "• Or pick any video in PC Files Explorer and tap 'Loop on PC'\n"
+                    "• Or send command: loop <path-to-video>\n\n"
+                    "⚙️ Settings: Fullscreen • Infinite Loop • 16% Volume"
+                )
+            }
 
     elif cmd in ["cancel", "abort", "إلغاء", "stop", "إيقاف", "close"]:
         had_timer = cancel_power_timer()
@@ -1766,12 +1877,18 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
                 size_str = format_size(bytes_received)
                 print(f"[UPLOAD] Saved '{safe_filename}' ({size_str}) to {DOWNLOADS_DIR}")
 
+                play_loop = self.headers.get("X-Play-Loop", "").lower() in ["true", "1", "yes"]
+                loop_msg = ""
+                if play_loop and os.path.exists(target_path):
+                    play_res = play_video_loop(target_path)
+                    loop_msg = f"\n\n🎬 Video immediately started in Fullscreen Loop mode at 16% volume!\n💡 Send 'stop' or 'close' to exit."
+
                 response_data = {
                     "status": "success",
                     "filename": safe_filename,
                     "size": bytes_received,
                     "path": target_path,
-                    "message": f"📥 File received successfully in PC Downloads folder:\n📁 {safe_filename} ({size_str})"
+                    "message": f"📥 File received successfully in PC Downloads folder:\n📁 {safe_filename} ({size_str}){loop_msg}"
                 }
                 body = json.dumps(response_data, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)

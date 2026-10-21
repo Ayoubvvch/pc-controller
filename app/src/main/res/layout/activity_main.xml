@@ -172,14 +172,14 @@
                 android:textSize="13sp" />
 
             <TextView
-                android:id="@+id/chipMessi"
+                android:id="@+id/chipLoopVideo"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
                 android:background="@drawable/bg_chip"
                 android:clickable="true"
                 android:focusable="true"
-                android:text="🐐 Messi"
+                android:text="🎬 Loop Video"
                 android:textColor="@color/accent"
                 android:textSize="13sp" />
 

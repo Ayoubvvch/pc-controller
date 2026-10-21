@@ -18,3 +18,4 @@ server/screenshots/
 server/clipboard_history.json
 server/power_timer.json
 server/authorized_devices.json
+server/last_loop_video.txt

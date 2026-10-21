@@ -1,4 +1,4 @@
-# 🎮 PC Controller (v2.2.0)
+# 🎮 PC Controller (v2.2.1)
 
 > A lightweight, blazing-fast, and secure client-server system to remotely monitor, manage, and interact with your Windows PC from an Android device over your local Wi-Fi network.
 
@@ -36,13 +36,13 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 ┌───────────────────────────────────────┐          ┌───────────────────────────────────────┐
 │           📱 For Your Phone           │          │           💻 For Your PC              │
 │                                       │          │                                       │
-│  Download: PCRemote-v2.2.0.apk        │          │  Download: pc-controller-server.zip   │
+│  Download: PCRemote-v2.2.1.apk        │          │  Download: pc-controller-server.zip   │
 │  (Directly from GitHub Releases)      │          │  (Or use the `server/` folder)        │
 └───────────────────────────────────────┘          └───────────────────────────────────────┘
 ```
 
 ### 1. 📱 Android Setup (Mobile Device)
-1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.2.0.apk`**.
+1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.2.1.apk`**.
 2. Install the APK on your Android phone.
 3. Open the app. When connected to the same Wi-Fi, it will automatically discover your PC via UDP broadcast.
 
@@ -137,10 +137,17 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 * **Native Windows CoreAudio API:** Instant, crackle-free audio level adjustments (`vol.exe`).
 * **Visual Slider & Presets:** Quick preset chips (`15%`, `25%`, `40%`, `50%`, `75%`, `100%`) and `mute` / `unmute` toggles.
 
-### 🌧️ 12. Ambient Automations
-* `sleep rain 15m` — Launches `Rain.mp4` via mpv in fullscreen loop mode, adjusts volume to 28%, and automatically suspends the PC when the timer ends.
-* `sleep rain 15m min` — Minimizes all open windows so only a clean black desktop remains while audio plays, then enters sleep mode.
-* `cancel` / `stop` — Instantly stops media playback and cancels any active power scheduler.
+### 🎬 12. Universal Video Looper & Ambient Automations
+* **Universal Fullscreen Looper (16% Vol):** Loop any video indefinitely in fullscreen at 16% master volume via `mpv`:
+  * **PC File Explorer:** Tap any video (`.mp4`, `.mkv`, `.mov`, `.webm`, etc.) in the file explorer and select **"🎬 Loop on PC"**.
+  * **Phone Video Upload:** Tap **`🎬 Loop Video`** chip ➔ **"Upload Video from Phone & Loop"** to immediately stream and play any phone video on PC.
+  * **Chat Commands:**
+    * `loop <path>` or `play <video>` — Plays the target video in fullscreen loop mode at 16% volume.
+    * `loop` — Replays the last played video in loop mode.
+    * `stop` / `close` / `cancel` — Instantly terminates video playback (`kill_mpv`) and restores control.
+* **Ambient Sleep Automations:**
+  * `sleep rain 15m` — Launches `Rain.mp4` via mpv in fullscreen loop mode, adjusts volume to 28%, and automatically suspends the PC when the timer ends.
+  * `sleep rain 15m min` — Minimizes all open windows so only a clean black desktop remains while audio plays, then enters sleep mode.
 
 ---
 
@@ -158,6 +165,9 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 | `screenshot` / `ss` | Capture all connected monitors combined |
 | `screenshot 1` / `ss 1` | Capture primary monitor |
 | `screenshot 2` / `ss 2` | Capture secondary monitor |
+| `loop <path>` / `play <path>` | Play video in fullscreen infinite loop at 16% master volume |
+| `loop` | Replay the last played video in loop mode |
+| `stop` / `close` | Stop video playback and cancel any active power timers |
 | `sleep <duration>` | Put PC to sleep (immediate or e.g. `sleep 15m`, `sleep 1h`) |
 | `shutdown <duration>` | Shut down PC (immediate with confirmation or e.g. `shutdown 30m`) |
 | `restart <duration>` | Restart PC (immediate with confirmation or scheduled) |
