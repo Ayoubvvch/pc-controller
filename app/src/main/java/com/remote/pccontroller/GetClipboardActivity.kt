@@ -65,6 +65,14 @@ class GetClipboardActivity : AppCompatActivity() {
         mainHandler.removeCallbacks(fallbackRunnable)
 
         val prefs = getSharedPreferences("pc_remote_prefs", Context.MODE_PRIVATE)
+        val token = prefs.getString("auth_token", null)
+        if (token.isNullOrEmpty()) {
+            Toast.makeText(applicationContext, "🔒 Please open the app and pair with PC first", Toast.LENGTH_LONG).show()
+            finish()
+            overridePendingTransition(0, 0)
+            return
+        }
+
         var ip = prefs.getString("pc_ip", "192.168.11.110") ?: "192.168.11.110"
         val port = prefs.getString("pc_port", "5050") ?: "5050"
 
@@ -72,14 +80,14 @@ class GetClipboardActivity : AppCompatActivity() {
 
         Thread {
             try {
-                var text = getClipboardText(ip, port)
+                var text = getClipboardText(ip, port, token)
                 if (text == null) {
                     // Try UDP auto-discovery fallback
                     val discoveredIp = discoverPcIp()
                     if (discoveredIp != null) {
                         ip = discoveredIp
                         prefs.edit().putString("pc_ip", discoveredIp).apply()
-                        text = getClipboardText(discoveredIp, port)
+                        text = getClipboardText(discoveredIp, port, token)
                     }
                 }
 
@@ -110,14 +118,15 @@ class GetClipboardActivity : AppCompatActivity() {
         overridePendingTransition(0, 0)
     }
 
-    private fun getClipboardText(ip: String, port: String): String? {
+    private fun getClipboardText(ip: String, port: String, token: String?): String? {
         return try {
-            val request = Request.Builder()
+            val builder = Request.Builder()
                 .url("http://$ip:$port/api/clipboard")
                 .get()
-                .build()
-
-            val response = client.newCall(request).execute()
+            if (!token.isNullOrEmpty()) {
+                builder.header("X-Auth-Token", token)
+            }
+            val response = client.newCall(builder.build()).execute()
             if (response.isSuccessful) {
                 val body = response.body?.string() ?: ""
                 val json = JSONObject(body)

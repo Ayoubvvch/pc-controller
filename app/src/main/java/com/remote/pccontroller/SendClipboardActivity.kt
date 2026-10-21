@@ -84,6 +84,14 @@ class SendClipboardActivity : AppCompatActivity() {
         }
 
         val prefs = getSharedPreferences("pc_remote_prefs", Context.MODE_PRIVATE)
+        val token = prefs.getString("auth_token", null)
+        if (token.isNullOrEmpty()) {
+            Toast.makeText(applicationContext, "🔒 Please open the app and pair with PC first", Toast.LENGTH_LONG).show()
+            finish()
+            overridePendingTransition(0, 0)
+            return
+        }
+
         var ip = prefs.getString("pc_ip", "192.168.11.110") ?: "192.168.11.110"
         val port = prefs.getString("pc_port", "5050") ?: "5050"
 
@@ -92,14 +100,14 @@ class SendClipboardActivity : AppCompatActivity() {
 
         Thread {
             try {
-                var success = postClipboard(ip, port, text)
+                var success = postClipboard(ip, port, text, token)
                 if (!success) {
                     // Fast UDP auto-discovery fallback
                     val discoveredIp = discoverPcIp()
                     if (discoveredIp != null) {
                         ip = discoveredIp
                         prefs.edit().putString("pc_ip", discoveredIp).apply()
-                        success = postClipboard(discoveredIp, port, text)
+                        success = postClipboard(discoveredIp, port, text, token)
                     }
                 }
 
@@ -121,18 +129,19 @@ class SendClipboardActivity : AppCompatActivity() {
         overridePendingTransition(0, 0)
     }
 
-    private fun postClipboard(ip: String, port: String, text: String): Boolean {
+    private fun postClipboard(ip: String, port: String, text: String, token: String?): Boolean {
         return try {
             val jsonPayload = JSONObject().apply {
                 put("text", text)
             }.toString()
             val requestBody = jsonPayload.toRequestBody("application/json; charset=utf-8".toMediaType())
-            val request = Request.Builder()
+            val builder = Request.Builder()
                 .url("http://$ip:$port/api/clipboard")
                 .post(requestBody)
-                .build()
-
-            val response = client.newCall(request).execute()
+            if (!token.isNullOrEmpty()) {
+                builder.header("X-Auth-Token", token)
+            }
+            val response = client.newCall(builder.build()).execute()
             response.isSuccessful
         } catch (e: IOException) {
             false

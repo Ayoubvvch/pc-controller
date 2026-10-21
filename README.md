@@ -1,4 +1,4 @@
-# 🎮 PC Controller (v2.1.3)
+# 🎮 PC Controller (v2.2.0)
 
 > A lightweight, blazing-fast, and secure client-server system to remotely monitor, manage, and interact with your Windows PC from an Android device over your local Wi-Fi network.
 
@@ -36,13 +36,13 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 ┌───────────────────────────────────────┐          ┌───────────────────────────────────────┐
 │           📱 For Your Phone           │          │           💻 For Your PC              │
 │                                       │          │                                       │
-│  Download: PCRemote-v2.1.3.apk        │          │  Download: pc-controller-server.zip   │
+│  Download: PCRemote-v2.2.0.apk        │          │  Download: pc-controller-server.zip   │
 │  (Directly from GitHub Releases)      │          │  (Or use the `server/` folder)        │
 └───────────────────────────────────────┘          └───────────────────────────────────────┘
 ```
 
 ### 1. 📱 Android Setup (Mobile Device)
-1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.1.3.apk`**.
+1. Go to [**Releases**](https://github.com/Ayoubvvch/pc-controller/releases) and download **`PCRemote-v2.2.0.apk`**.
 2. Install the APK on your Android phone.
 3. Open the app. When connected to the same Wi-Fi, it will automatically discover your PC via UDP broadcast.
 
@@ -59,20 +59,28 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 
 ## ✨ Features
 
-### 🛡️ 1. Absolute Persistent Power Management
+### 🛡️ 1. One-Time Zero-Friction Device Pairing & Security
+* **Wi-Fi Eavesdropping Protection:** Full security against unauthorized devices or strangers on the same local Wi-Fi network.
+* **Native Windows Modal Confirmation:** When connecting from a new phone for the first time, a prominent Windows popup appears on your PC screen displaying the phone's model name, ID, and IP address.
+* **Cryptographic Token Exchange:** Clicking "Yes" generates a secure 48-character authentication token saved persistently in `authorized_devices.json` and in the phone's private app storage.
+* **Zero Friction Daily Use:** Subsequent connections and commands are authenticated seamlessly in the background with zero delays or prompts.
+* **Hardened Endpoints:** All sensitive APIs (screenshots, file browsing, downloads, clipboard history, power commands, volume) strictly require an authorized token and return `401 Unauthorized` to any unauthorized client.
+* **Re-pair Anytime:** Easily re-pair or revoke authorization from Connection Settings.
+
+### 🛡️ 2. Absolute Persistent Power Management
 * **Accidental Click Protection:** Critical power commands (`shutdown`, `restart`, `hibernate`) require explicit confirmation (`yes` / `no`) within 60 seconds before executing.
 * **Persistent Power Scheduler:** Scheduled timers (`sleep 30m`, `shutdown 1h`, `hibernate 20`) are saved to disk (`power_timer.json`) and backed up by Windows Kernel/Task Scheduler.
 * **Survives Lock Screen:** Timers remain fully active and guaranteed even if you lock Windows (`Win + L`) or if the server process restarts.
 * **Real-time Countdown:** Check remaining time for any active power timer anytime using `status`.
 
-### 📸 2. Live Multi-Monitor Screen Previews
+### 📸 3. Live Multi-Monitor Screen Previews
 * Ultra-fast native capture powered by custom compiled C# binary:
   * `screenshot` or `screenshot all` — Captures all connected displays combined.
   * `screenshot 1` — Captures primary display.
   * `screenshot 2` — Captures secondary display.
 * Fullscreen preview modal in mobile app with **Pinch-to-Zoom** (`ZoomTouchListener`), one-tap Save to Gallery, and native Share Sheet integration.
 
-### 📂 3. Smart Remote File Explorer & High-Speed SSH Transfers
+### 📂 4. Smart Remote File Explorer & High-Speed SSH Transfers
 * Browse drives (`C:`, `D:`) and quick folders (Downloads, Desktop, Documents).
 * **Sorted by Newest First:** Newly created and downloaded files always appear right at the top.
 * **📁 Full Folder Transfers with Automatic Overwrite:**
@@ -88,40 +96,40 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
   * **Immediate Control & Cancellation:** Press `Ctrl+C` or close the CMD window from your PC anytime to cancel the transfer immediately.
   * Completely unburdens your phone: you can lock your screen or close the app safely while the transfer continues in the background.
 
-### 📤 4. Seamless Mobile-to-PC Sharing
+### 📤 5. Seamless Mobile-to-PC Sharing
 * **Chat Attachment (`📎`):** Tap the clip icon in chat to pick and send any photo, video, or document straight to your PC's `Downloads` folder.
 * **Android System Share Sheet:** Share links, gallery photos, or PDFs from any Android app directly into **PC Remote**.
 
-### 📋 5. PC Clipboard History (Windows Win + V on Phone)
+### 📋 6. PC Clipboard History (Windows Win + V on Phone)
 * **Browse Windows Clipboard History:** View and search items previously copied on your PC directly from your phone, just like Windows `Win + V`.
 * **One-Tap Actions:**
   * **"📋 Copy":** Copies the PC clipboard item directly into your Android phone's clipboard.
   * **"💻 Set on PC":** Re-activates that snippet on the Windows PC so you can immediately paste it (`Ctrl + V`) on your computer.
 * **Real-Time Win32 Background Watcher:** Continuously tracks Windows clipboard changes in the background without needing cloud sync or external pip packages, persisting up to 50 items securely across restarts.
 
-### 📱 6. Organized Top Bar with "More" Menu (`⋮`)
+### 📱 7. Organized Top Bar with "More" Menu (`⋮`)
 * **Decluttered Interface:** Consolidates multiple header buttons into an elegant 3-dots popup menu providing quick access to PC Clipboard History, PC File Browser, Settings, and Connection Refresh.
 * **Quick Action Chip:** Dedicated `📋 Win+V History` chip in the quick action bar for instant one-tap access.
 
-### 📋 7. Instant Clipboard Synchronization (Phone ➔ PC)
+### 📋 8. Instant Clipboard Synchronization (Phone ➔ PC)
 * **One-Tap Clipboard Button (`📋`):** Tap the dedicated clipboard button in the message bar or the `📋 Paste to PC` chip at the top.
 * **Interactive Modal Dialog:** Paste or type any text, URL, code snippet, or notes with a one-touch **"Paste from Phone"** button and live character count.
 * **Instant Native Windows Clipboard:** Text is immediately set in the Windows PC clipboard using native Win32 API. Press `Ctrl + V` anywhere on your computer to paste instantly!
 * **Chat Command Support:** You can also type `clip <text>`, `copy <text>`, or `setclip <text>` directly into the command bar.
 
-### 🔄 8. Persistent Background Service & Dual Notification Actions
+### 🔄 9. Persistent Background Service & Dual Notification Actions
 * **Stay Active 24/7:** Enable **"Keep Active in Background"** in Settings to prevent Android from terminating the app when minimized or when the screen turns off.
 * **Notification Bar Quick Actions:** Displays a persistent system notification with dual one-tap actions:
   * **"📋 Send Clip":** Immediately sends your phone's copied text to your PC without opening the app!
   * **"📥 Get PC Clip":** Immediately fetches whatever was copied on your PC (Ctrl + C) and copies it into your phone's clipboard!
 * **Instant Bidirectional Sync from Anywhere:** Tap either notification action from any app (browser, YouTube, chats, lock screen) for instant two-way clipboard exchange.
 
-### 🚀 9. In-App Direct APK Downloader & Auto-Installer
+### 🚀 10. In-App Direct APK Downloader & Auto-Installer
 * **One-Click In-App Update:** Tapping **"Check for App Updates"** in Settings now downloads the new APK directly inside the app with a live progress dialog showing percentage, downloaded MB, and total size.
 * **Automatic Installation Prompt:** Once the download reaches 100%, the app automatically launches the Android package installer prompt — zero browser redirects needed!
 * **Fixed Signing Certificate:** Built with a committed cryptographic keystore (`release.keystore`), guaranteeing every update can be installed directly over existing versions with one click.
 
-### 🔊 10. Hardware Volume Keys & Real-Time Volume HUD
+### 🔊 11. Hardware Volume Keys & Real-Time Volume HUD
 * **Control PC with Phone Side Buttons:** Pressing your phone's physical **Volume Up** or **Volume Down** buttons while inside the app directly raises or lowers your Windows PC's master volume!
 * **Floating Volume HUD:** Displays a sleek, animated on-screen volume pill with current percentage and a visual progress bar.
 * **Zero Disruption to Phone:** Consumes hardware key events so your phone's ringtone and media volume remain unaffected.
@@ -129,7 +137,7 @@ Setting up **PC Controller** takes less than a minute. Everything needed for bot
 * **Native Windows CoreAudio API:** Instant, crackle-free audio level adjustments (`vol.exe`).
 * **Visual Slider & Presets:** Quick preset chips (`15%`, `25%`, `40%`, `50%`, `75%`, `100%`) and `mute` / `unmute` toggles.
 
-### 🌧️ 11. Ambient Automations
+### 🌧️ 12. Ambient Automations
 * `sleep rain 15m` — Launches `Rain.mp4` via mpv in fullscreen loop mode, adjusts volume to 28%, and automatically suspends the PC when the timer ends.
 * `sleep rain 15m min` — Minimizes all open windows so only a clean black desktop remains while audio plays, then enters sleep mode.
 * `cancel` / `stop` — Instantly stops media playback and cancels any active power scheduler.

@@ -156,6 +156,27 @@
             android:layout_height="wrap_content" />
     </LinearLayout>
 
+    <!-- Security & Device Pairing Button -->
+    <LinearLayout
+        android:id="@+id/btnRePair"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:background="@drawable/bg_chip"
+        android:gravity="center"
+        android:clickable="true"
+        android:focusable="true"
+        android:layout_marginBottom="16dp">
+
+        <TextView
+            android:id="@+id/tvPairStatusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🛡️ Re-pair Device with PC"
+            android:textColor="@color/accent_blue"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
     <!-- Check for Updates Button -->
     <LinearLayout
         android:id="@+id/btnCheckUpdates"

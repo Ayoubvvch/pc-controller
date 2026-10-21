@@ -1288,20 +1288,224 @@ def execute_action(action_type, param=None):
             )
         }
 
+# ---------------------------------------------------------
+# Security & Device Pairing Architecture
+# ---------------------------------------------------------
+AUTH_DEVICES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "authorized_devices.json")
+authorized_devices = {}
+authorized_devices_lock = threading.Lock()
+pending_pair_requests = {}
+pending_pair_lock = threading.Lock()
+active_prompts = set()
+active_prompts_lock = threading.Lock()
+
+def load_authorized_devices():
+    global authorized_devices
+    if os.path.exists(AUTH_DEVICES_FILE):
+        try:
+            with open(AUTH_DEVICES_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    authorized_devices = data
+                    print(f"[AUTH] Loaded {len(authorized_devices)} authorized device(s).")
+        except Exception as e:
+            print(f"[AUTH] Error loading authorized devices: {e}")
+            authorized_devices = {}
+
+def save_authorized_devices():
+    try:
+        with open(AUTH_DEVICES_FILE, "w", encoding="utf-8") as f:
+            json.dump(authorized_devices, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[AUTH] Error saving authorized devices: {e}")
+
+load_authorized_devices()
+
+def is_token_authorized(token):
+    if not token:
+        return False
+    with authorized_devices_lock:
+        for dev_id, dev_data in authorized_devices.items():
+            if dev_data.get("auth_token") == token:
+                return True
+    return False
+
+def get_authorized_device_by_id(device_id):
+    if not device_id:
+        return None
+    with authorized_devices_lock:
+        return authorized_devices.get(device_id)
+
+def authorize_device(device_id, device_name, client_ip):
+    try:
+        import secrets
+        token = secrets.token_hex(24)
+    except Exception:
+        token = os.urandom(24).hex()
+
+    with authorized_devices_lock:
+        authorized_devices[device_id] = {
+            "device_name": device_name,
+            "ip": client_ip,
+            "auth_token": token,
+            "paired_at": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+        save_authorized_devices()
+    return token
+
+def revoke_device(device_id=None, token=None):
+    with authorized_devices_lock:
+        to_delete = []
+        for d_id, d_data in authorized_devices.items():
+            if (device_id and d_id == device_id) or (token and d_data.get("auth_token") == token):
+                to_delete.append(d_id)
+        for d_id in to_delete:
+            del authorized_devices[d_id]
+        if to_delete:
+            save_authorized_devices()
+            print(f"[AUTH] Revoked {len(to_delete)} device(s).")
+
+def prompt_user_pairing(device_id, device_name, client_ip):
+    text = (
+        f"A new mobile device is requesting permission to connect and control this PC:\n\n"
+        f"📱 Device: {device_name}\n"
+        f"🌐 IP Address: {client_ip}\n"
+        f"🆔 ID: {device_id[:8]}...\n\n"
+        f"Do you authorize this phone to control this computer?\n\n"
+        f"• Click 'Yes' to grant permanent access.\n"
+        f"• Click 'No' to block this request."
+    )
+    title = "🛡️ PC Remote Control - Device Pairing Request"
+    # MB_YESNO | MB_ICONQUESTION | MB_TOPMOST | MB_SYSTEMMODAL | MB_SETFOREGROUND
+    flags = 0x00000004 | 0x00000020 | 0x00040000 | 0x00001000 | 0x00010000
+    try:
+        res = ctypes.windll.user32.MessageBoxW(0, text, title, flags)
+    except Exception as e:
+        print(f"[AUTH] Error displaying MessageBoxW: {e}")
+        res = 7  # IDNO
+
+    with pending_pair_lock:
+        if res == 6:  # IDYES
+            token = authorize_device(device_id, device_name, client_ip)
+            pending_pair_requests[device_id] = {
+                "status": "approved",
+                "auth_token": token
+            }
+            print(f"[AUTH] ✅ Device '{device_name}' ({client_ip}) AUTHORIZED by PC user.")
+        else:
+            pending_pair_requests[device_id] = {
+                "status": "rejected",
+                "message": "Pairing was declined on the PC."
+            }
+            print(f"[AUTH] ❌ Device '{device_name}' ({client_ip}) REJECTED by PC user.")
+
+def request_device_pairing(device_id, device_name, client_ip):
+    with active_prompts_lock:
+        if device_id in active_prompts:
+            return
+        active_prompts.add(device_id)
+
+    with pending_pair_lock:
+        pending_pair_requests[device_id] = {"status": "pending"}
+
+    def _worker():
+        try:
+            prompt_user_pairing(device_id, device_name, client_ip)
+        finally:
+            with active_prompts_lock:
+                active_prompts.discard(device_id)
+
+    threading.Thread(target=_worker, daemon=True).start()
+
 class RemoteHandler(http.server.BaseHTTPRequestHandler):
     def _send_cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Filename, X-Filename-B64")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Filename, X-Filename-B64, X-Auth-Token")
 
     def do_OPTIONS(self):
         self.send_response(204)
         self._send_cors_headers()
         self.end_headers()
 
+    def _is_authenticated(self):
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path in ["/ping", "/api/auth/pair_request", "/api/auth/pair_status"]:
+            return True
+
+        token = self.headers.get("X-Auth-Token", "").strip()
+        if not token:
+            params = urllib.parse.parse_qs(parsed.query)
+            token = params.get("token", [""])[0].strip()
+
+        if not token:
+            return False
+
+        return is_token_authorized(token)
+
+    def _send_unauthorized(self):
+        data = {
+            "status": "error",
+            "code": "UNAUTHORIZED",
+            "message": "🔒 Access Denied: Unauthorized device. Please pair your mobile device with this PC first."
+        }
+        body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        self.send_response(401)
+        self._send_cors_headers()
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path in ["/", "/ping", "/status"]:
+        if parsed.path == "/ping":
+            data = {"status": "success", "message": "pong"}
+            body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if parsed.path == "/api/auth/pair_status":
+            params = urllib.parse.parse_qs(parsed.query)
+            device_id = params.get("device_id", [""])[0].strip()
+            if not device_id:
+                data = {"status": "error", "message": "Missing device_id parameter"}
+            else:
+                existing = get_authorized_device_by_id(device_id)
+                if existing and existing.get("auth_token"):
+                    data = {
+                        "status": "approved",
+                        "auth_token": existing["auth_token"],
+                        "device_name": existing.get("device_name", "")
+                    }
+                else:
+                    with pending_pair_lock:
+                        status_data = pending_pair_requests.get(device_id)
+                    if status_data:
+                        data = status_data
+                    else:
+                        data = {"status": "not_found", "message": "No active pairing request for this device"}
+
+            body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        # Enforce device authorization check for all other GET routes!
+        if not self._is_authenticated():
+            self._send_unauthorized()
+            return
+
+        if parsed.path in ["/", "/status"]:
             data = execute_action("status")
             body = json.dumps(data, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
@@ -1443,6 +1647,69 @@ class RemoteHandler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/api/auth/pair_request":
+            content_len = int(self.headers.get("Content-Length", 0))
+            post_body = self.rfile.read(content_len).decode("utf-8").strip()
+            try:
+                payload = json.loads(post_body)
+            except Exception:
+                payload = {}
+
+            device_id = payload.get("device_id", "").strip()
+            device_name = payload.get("device_name", "Unknown Mobile Device").strip()
+            client_ip = self.client_address[0]
+
+            if not device_id:
+                data = {"status": "error", "message": "Missing device_id"}
+            else:
+                existing = get_authorized_device_by_id(device_id)
+                if existing and existing.get("auth_token"):
+                    data = {
+                        "status": "approved",
+                        "auth_token": existing["auth_token"],
+                        "message": "Device is already authorized"
+                    }
+                else:
+                    request_device_pairing(device_id, device_name, client_ip)
+                    data = {
+                        "status": "pending",
+                        "message": "Pairing confirmation prompt displayed on PC"
+                    }
+
+            body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if parsed.path == "/api/auth/unpair":
+            content_len = int(self.headers.get("Content-Length", 0))
+            post_body = self.rfile.read(content_len).decode("utf-8").strip()
+            try:
+                payload = json.loads(post_body)
+            except Exception:
+                payload = {}
+            device_id = payload.get("device_id", "").strip()
+            token = self.headers.get("X-Auth-Token", "").strip()
+            revoke_device(device_id, token)
+            data = {"status": "success", "message": "Device unpaired successfully"}
+            body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        # Enforce device authorization check for all other POST routes!
+        if not self._is_authenticated():
+            self._send_unauthorized()
+            return
+
         if parsed.path in ["/upload", "/api/upload"]:
             try:
                 os.makedirs(DOWNLOADS_DIR, exist_ok=True)

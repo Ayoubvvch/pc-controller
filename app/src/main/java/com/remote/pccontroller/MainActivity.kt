@@ -66,17 +66,31 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var prefs: SharedPreferences
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
-        .build()
+    private val client: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .addInterceptor { chain ->
+                val token = prefs.getString("auth_token", null)
+                val newReq = if (!token.isNullOrEmpty()) {
+                    chain.request().newBuilder()
+                        .header("X-Auth-Token", token)
+                        .build()
+                } else {
+                    chain.request()
+                }
+                chain.proceed(newReq)
+            }
+            .build()
+    }
 
     private val messages = mutableListOf<ChatMessage>()
     private lateinit var adapter: ChatAdapter
@@ -514,10 +528,172 @@ class MainActivity : AppCompatActivity() {
         return false
     }
 
+    private fun getOrCreateDeviceId(): String {
+        var devId = prefs.getString("device_id", null)
+        if (devId.isNullOrEmpty()) {
+            devId = UUID.randomUUID().toString()
+            prefs.edit().putString("device_id", devId).apply()
+        }
+        return devId
+    }
+
+    private fun getDeviceName(): String {
+        val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+        val model = Build.MODEL
+        return if (model.startsWith(manufacturer, ignoreCase = true)) {
+            model
+        } else {
+            "$manufacturer $model"
+        }
+    }
+
+    private var pairingDialog: AlertDialog? = null
+    private var isPairingCancelled = false
+    private val pairingHandler = Handler(Looper.getMainLooper())
+
+    private fun startDevicePairingFlow() {
+        if (isFinishing || isDestroyed) return
+        pairingDialog?.dismiss()
+
+        val baseUrl = getBaseUrl()
+        val deviceId = getOrCreateDeviceId()
+        val deviceName = getDeviceName()
+
+        isPairingCancelled = false
+
+        val builder = AlertDialog.Builder(this)
+        builder.setTitle("🛡️ PC Pairing Authorization")
+        builder.setMessage(
+            "First-Time Connection Request:\n\n" +
+            "📱 Device: $deviceName\n" +
+            "🌐 PC Address: $baseUrl\n\n" +
+            "A confirmation window has popped up on your computer screen.\n\n" +
+            "👉 Please click 'Yes' on your PC to authorize this phone."
+        )
+        builder.setCancelable(false)
+        builder.setNegativeButton("Cancel") { dialog, _ ->
+            isPairingCancelled = true
+            pairingHandler.removeCallbacksAndMessages(null)
+            dialog.dismiss()
+            tvConnectionStatus.text = "🔒 Pairing Cancelled"
+            tvConnectionStatus.setTextColor(Color.parseColor("#F59E0B"))
+        }
+
+        pairingDialog = builder.create()
+        pairingDialog?.show()
+
+        val jsonPayload = JSONObject().apply {
+            put("device_id", deviceId)
+            put("device_name", deviceName)
+        }.toString()
+
+        val body = jsonPayload.toRequestBody("application/json; charset=utf-8".toMediaType())
+        val request = Request.Builder()
+            .url("$baseUrl/api/auth/pair_request")
+            .post(body)
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                runOnUiThread {
+                    if (!isPairingCancelled) {
+                        pairingDialog?.dismiss()
+                        Toast.makeText(this@MainActivity, "Could not reach PC: ${e.message}", Toast.LENGTH_LONG).show()
+                        tvConnectionStatus.text = "🔴 PC Unreachable"
+                        tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
+                    }
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val respStr = response.body?.string() ?: ""
+                response.close()
+                try {
+                    val json = JSONObject(respStr)
+                    val status = json.optString("status")
+                    if (status == "approved") {
+                        val token = json.getString("auth_token")
+                        runOnUiThread {
+                            onPairingApproved(token)
+                        }
+                    } else {
+                        startPollingPairStatus(baseUrl, deviceId, 0)
+                    }
+                } catch (e: Exception) {
+                    startPollingPairStatus(baseUrl, deviceId, 0)
+                }
+            }
+        })
+    }
+
+    private fun startPollingPairStatus(baseUrl: String, deviceId: String, attempt: Int) {
+        if (isPairingCancelled || attempt > 40) {
+            if (attempt > 40) {
+                runOnUiThread {
+                    pairingDialog?.dismiss()
+                    Toast.makeText(this@MainActivity, "⏳ Pairing request timed out on PC", Toast.LENGTH_LONG).show()
+                    tvConnectionStatus.text = "⏳ Pairing Timed Out"
+                    tvConnectionStatus.setTextColor(Color.parseColor("#F59E0B"))
+                }
+            }
+            return
+        }
+
+        pairingHandler.postDelayed({
+            if (isPairingCancelled) return@postDelayed
+
+            val req = Request.Builder()
+                .url("$baseUrl/api/auth/pair_status?device_id=$deviceId")
+                .get()
+                .build()
+
+            client.newCall(req).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    startPollingPairStatus(baseUrl, deviceId, attempt + 1)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    val str = response.body?.string() ?: ""
+                    response.close()
+                    try {
+                        val json = JSONObject(str)
+                        val status = json.optString("status")
+                        if (status == "approved") {
+                            val token = json.getString("auth_token")
+                            runOnUiThread {
+                                onPairingApproved(token)
+                            }
+                        } else if (status == "rejected") {
+                            runOnUiThread {
+                                pairingDialog?.dismiss()
+                                Toast.makeText(this@MainActivity, "❌ Pairing was declined on PC", Toast.LENGTH_LONG).show()
+                                tvConnectionStatus.text = "❌ Pairing Declined"
+                                tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
+                            }
+                        } else {
+                            startPollingPairStatus(baseUrl, deviceId, attempt + 1)
+                        }
+                    } catch (e: Exception) {
+                        startPollingPairStatus(baseUrl, deviceId, attempt + 1)
+                    }
+                }
+            })
+        }, 1500)
+    }
+
+    private fun onPairingApproved(token: String) {
+        prefs.edit().putString("auth_token", token).apply()
+        pairingDialog?.dismiss()
+        Toast.makeText(this, "✅ Phone paired successfully with PC!", Toast.LENGTH_SHORT).show()
+        checkConnection(autoDiscoverOnFail = false)
+    }
+
     private fun checkConnection(autoDiscoverOnFail: Boolean = true) {
         val baseUrl = getBaseUrl()
         tvConnectionStatus.text = "🟡 Checking... ($baseUrl)"
         tvConnectionStatus.setTextColor(Color.parseColor("#F59E0B"))
+
+        val authToken = prefs.getString("auth_token", null)
 
         val request = Request.Builder()
             .url("$baseUrl/ping")
@@ -549,12 +725,49 @@ class MainActivity : AppCompatActivity() {
                 response.close()
                 runOnUiThread {
                     if (successful) {
-                        tvConnectionStatus.text = "🟢 Connected ($baseUrl)"
-                        tvConnectionStatus.setTextColor(Color.parseColor("#10B981"))
-                        fetchCurrentPcVolume()
+                        if (authToken.isNullOrEmpty()) {
+                            tvConnectionStatus.text = "🔒 Pairing Required ($baseUrl)"
+                            tvConnectionStatus.setTextColor(Color.parseColor("#F59E0B"))
+                            startDevicePairingFlow()
+                        } else {
+                            verifyAuthentication(baseUrl)
+                        }
                     } else {
                         tvConnectionStatus.text = "🔴 Response Error ($baseUrl)"
                         tvConnectionStatus.setTextColor(Color.parseColor("#EF4444"))
+                    }
+                }
+            }
+        })
+    }
+
+    private fun verifyAuthentication(baseUrl: String) {
+        val req = Request.Builder()
+            .url("$baseUrl/api/volume")
+            .get()
+            .build()
+
+        client.newCall(req).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                runOnUiThread {
+                    tvConnectionStatus.text = "🟢 Connected ($baseUrl)"
+                    tvConnectionStatus.setTextColor(Color.parseColor("#10B981"))
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val code = response.code
+                response.close()
+                runOnUiThread {
+                    if (code == 401) {
+                        prefs.edit().remove("auth_token").apply()
+                        tvConnectionStatus.text = "🔒 Pairing Required ($baseUrl)"
+                        tvConnectionStatus.setTextColor(Color.parseColor("#F59E0B"))
+                        startDevicePairingFlow()
+                    } else {
+                        tvConnectionStatus.text = "🟢 Connected ($baseUrl)"
+                        tvConnectionStatus.setTextColor(Color.parseColor("#10B981"))
+                        fetchCurrentPcVolume()
                     }
                 }
             }
@@ -1575,11 +1788,17 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
+        val btnRePair = view.findViewById<View>(R.id.btnRePair)
+        val tvPairStatusText = view.findViewById<TextView>(R.id.tvPairStatusText)
+        val hasToken = !prefs.getString("auth_token", null).isNullOrEmpty()
+        tvPairStatusText?.text = if (hasToken) "🛡️ Re-pair Device with PC (Paired ✅)" else "🛡️ Pair Device with PC"
+
         btnCheckUpdates?.setOnClickListener {
             checkForUpdates(tvCheckUpdatesText)
         }
 
-        AlertDialog.Builder(this)
+        var settingsDialog: AlertDialog? = null
+        val dialogBuilder = AlertDialog.Builder(this)
             .setView(view)
             .setPositiveButton("Save") { _, _ ->
                 val newIp = etIp.text.toString().trim()
@@ -1618,7 +1837,14 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             .setNegativeButton("Cancel", null)
-            .show()
+
+        settingsDialog = dialogBuilder.create()
+        btnRePair?.setOnClickListener {
+            prefs.edit().remove("auth_token").apply()
+            settingsDialog?.dismiss()
+            startDevicePairingFlow()
+        }
+        settingsDialog.show()
     }
 
     private fun checkForUpdates(statusView: TextView?) {
@@ -1655,7 +1881,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     runOnUiThread {
-                        val currentVersion = "v2.1.3"
+                        val currentVersion = "v2.2.0"
                         if (tagName.isNotEmpty() && tagName != currentVersion) {
                             statusView?.text = "🚀 New update available: $tagName"
                             AlertDialog.Builder(this@MainActivity)

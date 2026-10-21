@@ -17,3 +17,4 @@ server/screenshots/
 *.apk
 server/clipboard_history.json
 server/power_timer.json
+server/authorized_devices.json
