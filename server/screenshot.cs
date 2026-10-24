@@ -5,12 +5,29 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 class ScreenCapture {
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr OpenInputDesktop(uint dwFlags, bool fInherit, uint dwDesiredAccess);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetThreadDesktop(IntPtr hDesktop);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool CloseDesktop(IntPtr hDesktop);
+
     [DllImport("user32.dll")]
     private static extern bool SetProcessDPIAware();
 
     static void Main(string[] args) {
+        IntPtr hInput = IntPtr.Zero;
         try {
             try { SetProcessDPIAware(); } catch {}
+
+            try {
+                hInput = OpenInputDesktop(0, false, 0x01FF);
+                if (hInput != IntPtr.Zero) {
+                    SetThreadDesktop(hInput);
+                }
+            } catch {}
 
             string outputPath = args.Length > 0 ? args[0] : "screenshot.jpg";
             string targetScreen = args.Length > 1 ? args[1].ToLower().Trim() : "all";
@@ -56,6 +73,10 @@ class ScreenCapture {
         } catch (Exception ex) {
             Console.Error.WriteLine("ERROR:" + ex.Message);
             Environment.Exit(1);
+        } finally {
+            if (hInput != IntPtr.Zero) {
+                try { CloseDesktop(hInput); } catch {}
+            }
         }
     }
 }
