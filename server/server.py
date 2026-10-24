@@ -559,9 +559,42 @@ def set_last_loop_video(path):
     except Exception:
         pass
 
+def minimize_all_windows():
+    """Minimizes all currently open windows so the desktop is cleared."""
+    try:
+        user32.keybd_event(0x5B, 0, 0, 0) # VK_LWIN down
+        user32.keybd_event(0x4D, 0, 0, 0) # VK_M down
+        user32.keybd_event(0x4D, 0, 2, 0) # VK_M up
+        user32.keybd_event(0x5B, 0, 2, 0) # VK_LWIN up
+    except Exception:
+        pass
+    try:
+        subprocess.run(["powershell", "-NoProfile", "-Command", "(New-Object -ComObject Shell.Application).MinimizeAll()"],
+                       capture_output=True,
+                       creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+    except Exception:
+        pass
+
+def pin_mpv_to_foreground():
+    """Finds the MPV window and forces it to the absolute topmost Z-order and foreground."""
+    def worker():
+        for _ in range(12):
+            time.sleep(0.15)
+            hwnd = user32.FindWindowW("mpv", None)
+            if hwnd:
+                try:
+                    user32.ShowWindow(hwnd, 3) # SW_SHOWMAXIMIZED
+                    user32.SetForegroundWindow(hwnd)
+                    # HWND_TOPMOST = -1, SWP_NOMOVE = 0x0002, SWP_NOSIZE = 0x0001, SWP_SHOWWINDOW = 0x0040
+                    user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
+                except Exception:
+                    pass
+                break
+    threading.Thread(target=worker, daemon=True).start()
+
 def play_video_loop(video_path):
     """
-    Plays any video in Fullscreen, Infinite Loop, at 16% System Volume using mpv.
+    Plays any video in Topmost Fullscreen, Infinite Loop, at 16% System Volume using mpv.
     """
     if not video_path or not str(video_path).strip():
         return {
@@ -597,17 +630,30 @@ def play_video_loop(video_path):
     # Stop any currently active mpv
     kill_mpv()
 
+    # Minimize all other windows so nothing stays above or behind the video
+    minimize_all_windows()
+
     # Set master volume to 16%
     set_system_volume(16)
 
     try:
-        subprocess.Popen([mpv_exec, "--fs", "--loop-file=inf", target_video],
-                         creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        mpv_args = [
+            mpv_exec,
+            "--fs",
+            "--ontop",
+            "--ontop-level=system",
+            "--focus-on=all",
+            "--no-border",
+            "--loop-file=inf",
+            target_video
+        ]
+        subprocess.Popen(mpv_args, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        pin_mpv_to_foreground()
         set_last_loop_video(target_video)
         fname = os.path.basename(target_video)
         return {
             "status": "success",
-            "message": f"🎬 Playing '{fname}' in looping fullscreen mode at 16% volume! 🔥\n💡 Send 'stop' or 'close' to exit."
+            "message": f"🎬 Playing '{fname}' in topmost looping fullscreen mode at 16% volume! 🔥\n💡 Send 'stop' or 'close' to exit."
         }
     except Exception as ex:
         return {
@@ -1096,10 +1142,11 @@ def execute_action(action_type, param=None):
             threading.Thread(target=sweep_minimize, daemon=True).start()
             mode_desc = "with all windows minimized (Desktop only)"
         else:
-            # Standard fullscreen mode
-            subprocess.Popen([mpv_exec, "--fs", "--loop-file=inf", RAIN_VIDEO],
+            # Standard fullscreen mode with topmost pin
+            subprocess.Popen([mpv_exec, "--fs", "--ontop", "--ontop-level=system", "--focus-on=all", "--no-border", "--loop-file=inf", RAIN_VIDEO],
                              creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-            mode_desc = "in fullscreen looping mode"
+            pin_mpv_to_foreground()
+            mode_desc = "in topmost fullscreen looping mode"
 
         # Absolute persistent schedule for sleep
         schedule_power_timer("sleep", sec, dur_human)
