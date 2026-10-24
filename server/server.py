@@ -290,7 +290,15 @@ def execute_system_power(action):
     kill_mpv()
     print(f"[POWER] Executing forced power action: {action}")
     
-    # 1. Unconditionally stop active media / audio streams so Windows won't block sleep
+    # 1. Clean up persistent timer file FIRST before triggering OS power down!
+    if os.path.exists(POWER_STATE_FILE):
+        try:
+            os.remove(POWER_STATE_FILE)
+        except Exception:
+            pass
+    active_sleep_details = None
+
+    # 2. Unconditionally stop active media / audio streams so Windows won't block sleep
     try:
         user32.keybd_event(0xB3, 0, 0, 0) # VK_MEDIA_PLAY_PAUSE down
         user32.keybd_event(0xB3, 0, 2, 0) # VK_MEDIA_PLAY_PAUSE up
@@ -305,7 +313,7 @@ def execute_system_power(action):
     except Exception:
         pass
 
-    # 2. Execute power command with FORCE flags
+    # 3. Execute power command with FORCE flags
     if action == "shutdown":
         subprocess.run(["shutdown", "/s", "/f", "/t", "0", "/c", "PC Remote Absolute Shutdown"],
                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
@@ -316,26 +324,16 @@ def execute_system_power(action):
         subprocess.run(["shutdown", "/h"],
                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
     elif action == "sleep":
-        # First try ctypes SetSuspendState(0, 1, 0) -> Suspend=0, Force=1, DisableWake=0
         try:
             ctypes.windll.powrprof.SetSuspendState(0, 1, 0)
         except Exception:
             pass
-        # Backup: PowerShell forced suspend
         ps_cmd = (
             "Add-Type -AssemblyName System.Windows.Forms; "
             "[System.Windows.Forms.Application]::SetSuspendState([System.Windows.Forms.PowerState]::Suspend, $true, $false)"
         )
         subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd],
                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-
-    # 3. Clean up persistent timer file
-    if os.path.exists(POWER_STATE_FILE):
-        try:
-            os.remove(POWER_STATE_FILE)
-        except Exception:
-            pass
-    active_sleep_details = None
 
 def schedule_power_timer(action, seconds, human_text):
     """Schedules an absolute, persistent power timer with OS-level redundancy."""
@@ -351,6 +349,7 @@ def schedule_power_timer(action, seconds, human_text):
         "action": action,
         "seconds": seconds,
         "target_epoch": target_epoch,
+        "created_epoch": time.time(),
         "human_text": human_text,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
@@ -456,24 +455,51 @@ def init_power_scheduler():
             with open(POWER_STATE_FILE, "r", encoding="utf-8") as f:
                 state = json.load(f)
             target_epoch = state.get("target_epoch", 0)
+            created_epoch = state.get("created_epoch", 0)
             action = state.get("action", "sleep")
             remaining = target_epoch - time.time()
-            if remaining > 0:
-                print(f"[POWER] 🔄 Resuming active {action} timer! {int(remaining)}s ({format_duration(int(remaining))}) remaining...")
-                active_sleep_details = state
-                active_power_cancel_event.clear()
-                def resume_worker():
-                    while not active_power_cancel_event.is_set():
-                        rem = target_epoch - time.time()
-                        if rem <= 0:
-                            execute_system_power(action)
-                            break
-                        time.sleep(min(rem, 1.0))
-                active_power_thread = threading.Thread(target=resume_worker, daemon=True, name="PowerResume")
-                active_power_thread.start()
-            else:
-                print(f"[POWER] ⚠️ Found expired {action} timer from disk! Executing now...")
-                execute_system_power(action)
+
+            # Calculate system boot timestamp
+            try:
+                uptime_sec = ctypes.windll.kernel32.GetTickCount64() / 1000.0
+                boot_epoch = time.time() - uptime_sec
+            except Exception:
+                boot_epoch = 0
+
+            # Rule 1: NEVER execute an expired power timer on PC boot!
+            if remaining <= 0:
+                print(f"[POWER] 🗑️ Discarding expired/stale {action} timer (expired {abs(int(remaining))}s ago while PC was off).")
+                try:
+                    os.remove(POWER_STATE_FILE)
+                except Exception:
+                    pass
+                active_sleep_details = None
+                return
+
+            # Rule 2: If the timer was created in a previous boot session for shutdown/restart/hibernate,
+            # that power action has already been fulfilled by the reboot. Discard it.
+            if action in ["shutdown", "restart", "hibernate"] and created_epoch > 0 and created_epoch < boot_epoch:
+                print(f"[POWER] 🗑️ Discarding stale {action} timer created prior to current Windows boot session.")
+                try:
+                    os.remove(POWER_STATE_FILE)
+                except Exception:
+                    pass
+                active_sleep_details = None
+                return
+
+            # Resuming a legitimately pending timer within the same session
+            print(f"[POWER] 🔄 Resuming active {action} timer! {int(remaining)}s ({format_duration(int(remaining))}) remaining...")
+            active_sleep_details = state
+            active_power_cancel_event.clear()
+            def resume_worker():
+                while not active_power_cancel_event.is_set():
+                    rem = target_epoch - time.time()
+                    if rem <= 0:
+                        execute_system_power(action)
+                        break
+                    time.sleep(min(rem, 1.0))
+            active_power_thread = threading.Thread(target=resume_worker, daemon=True, name="PowerResume")
+            active_power_thread.start()
         except Exception as e:
             print(f"[POWER] Error restoring power scheduler: {e}")
 
